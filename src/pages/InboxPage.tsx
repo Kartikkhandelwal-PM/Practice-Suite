@@ -65,6 +65,7 @@ function EmailAutocompleteInput({ value = '', onChange, placeholder, users, clie
 export function InboxPage() {
   const { emails, setEmails, clients, users } = useApp();
   const toast = useToast();
+  const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
   const [search, setSearch] = useState('');
   const [clientFilter, setClientFilter] = useState('');
@@ -104,9 +105,14 @@ export function InboxPage() {
   };
 
   const handleAiDraft = async () => {
+    if (!geminiApiKey) {
+      toast('Set VITE_GEMINI_API_KEY in .env.local to use AI draft', 'error');
+      return;
+    }
+
     setIsDrafting(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
+      const ai = new GoogleGenAI({ apiKey: geminiApiKey });
       const prompt = composeData.body.trim()
         ? `Please rephrase and improve the following email draft to be more professional and clear. Return a JSON object with two keys: "subject" (a concise, professional subject line) and "body" (the improved email body in HTML format, using <p>, <br>, <strong> etc. for formatting). Do not include any extra conversational text or markdown code blocks outside the JSON.\n\nOriginal Subject: ${composeData.subject}\nOriginal Body: ${composeData.body}`
         : `Please write a professional email draft based on the subject: "${composeData.subject}". Return a JSON object with two keys: "subject" (a concise, professional subject line) and "body" (the email body in HTML format, using <p>, <br>, <strong> etc. for formatting). Do not include any extra conversational text or markdown code blocks outside the JSON.`;
@@ -130,8 +136,9 @@ export function InboxPage() {
       const result = JSON.parse(response.text || '{}');
       setAiDraft({ subject: result.subject || composeData.subject, body: result.body || 'Failed to generate draft.' });
     } catch (error) {
-      console.error(error);
-      toast('Failed to generate AI draft', 'error');
+      console.error('AI draft failed', error);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast(`Failed to generate AI draft: ${message}`, 'error');
     } finally {
       setIsDrafting(false);
     }
