@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { Plus, Edit2, Trash2, X, GripVertical, LayoutTemplate, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 import { TypeChip } from '../components/ui/Badges';
 import { Modal } from '../components/ui/Modal';
@@ -12,6 +13,7 @@ import { PageHeader } from '../components/ui/PageHeader';
 export function TemplatesPage() {
   const { templates, setTemplates, tasks } = useApp();
   const toast = useToast();
+  const { confirm } = useConfirm();
 
   const [filter, setFilter] = useState('');
   const [modal, setModal] = useState<'view' | 'create' | 'edit' | null>(null);
@@ -65,8 +67,8 @@ export function TemplatesPage() {
     setForm(null);
   };
 
-  const deleteTmpl = (id: string) => {
-    if (confirm('Delete template?')) {
+  const deleteTmpl = async (id: string) => {
+    if (await confirm({ title: 'Delete Template', message: 'Are you sure you want to delete this template?', danger: true })) {
       setTemplates(t => t.filter(x => x.id !== id));
       toast('Template deleted');
     }
@@ -273,6 +275,7 @@ export function TemplatesPage() {
       {isTaskModalOpen && (
         <TaskModal
           task={editingTask}
+          templateId={editingTask?.title ? templates.find(t => t.name === editingTask.title)?.id : undefined}
           onClose={() => setIsTaskModalOpen(false)}
         />
       )}

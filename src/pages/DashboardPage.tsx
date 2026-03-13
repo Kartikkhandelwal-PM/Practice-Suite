@@ -32,17 +32,17 @@ export function DashboardPage() {
     setTasks(tasks.map(t => t.id === id ? { ...t, status: 'Completed' } : t));
   };
   const overdue = tasks.filter(t => t.status !== 'Completed' && (daysLeft(t.dueDate) ?? 0) < 0);
-  const inProgress = tasks.filter(t => t.status === 'In Progress').length;
-  const completed = tasks.filter(t => t.status === 'Completed').length;
-  const dueSoon = tasks.filter(t => t.status !== 'Completed' && (daysLeft(t.dueDate) ?? -1) >= 0 && (daysLeft(t.dueDate) ?? 8) <= 7).length;
+  const awaitingInfo = tasks.filter(t => t.status === 'Awaiting Info');
+  const dueSoon = tasks.filter(t => t.status !== 'Completed' && (daysLeft(t.dueDate) ?? -1) >= 0 && (daysLeft(t.dueDate) ?? 8) <= 7);
+  const underReview = tasks.filter(t => t.status === 'Under Review');
   const urgent = deadlines.filter(d => (daysLeft(d.dueDate) ?? 8) <= 7 && (daysLeft(d.dueDate) ?? -1) >= 0);
   const upcomingMeetings = meetings.filter(m => (daysLeft(m.date) ?? -1) >= 0 && m.status !== 'completed').slice(0, 3);
 
   const stats = [
-    { id: 'overdue', label: 'Overdue Tasks', num: overdue.length, sub: `${Math.abs(Math.min(...overdue.map(t => daysLeft(t.dueDate) || 0)) || 0)} days max`, color: '#dc2626', icon: AlertCircle, filter: 'overdue' },
-    { id: 'in-progress', label: 'In Progress', num: inProgress, sub: 'Active tasks', color: '#2563eb', icon: Zap, filter: 'In Progress' },
-    { id: 'due-soon', label: 'Due This Week', num: dueSoon, sub: 'In the next 7 days', color: '#d97706', icon: Clock, filter: 'due-soon' },
-    { id: 'completed', label: 'Completed', num: completed, sub: `of ${tasks.length} total tasks`, color: '#059669', icon: CheckCircle, filter: 'Completed' },
+    { id: 'overdue', label: 'Overdue Tasks', num: overdue.length, sub: overdue.length > 0 ? `${Math.abs(Math.min(...overdue.map(t => daysLeft(t.dueDate) || 0)))} days max` : 'No overdue tasks', color: '#dc2626', icon: AlertCircle, filter: 'overdue' },
+    { id: 'due-soon', label: 'Due This Week', num: dueSoon.length, sub: 'In the next 7 days', color: '#2563eb', icon: Clock, filter: 'due-soon' },
+    { id: 'awaiting-info', label: 'Awaiting Info', num: awaitingInfo.length, sub: 'Blocked by client', color: '#d97706', icon: ShieldAlert, filter: 'Awaiting Info' },
+    { id: 'under-review', label: 'Under Review', num: underReview.length, sub: 'Needs partner approval', color: '#8b5cf6', icon: CheckCircle2, filter: 'Under Review' },
   ];
 
   const handleStatClick = (s: typeof stats[0]) => {
@@ -50,10 +50,10 @@ export function DashboardPage() {
       navigate('/tasks?tab=overdue');
     } else if (s.id === 'due-soon') {
       navigate('/tasks?tab=due-soon');
-    } else if (s.id === 'in-progress') {
-      navigate('/tasks?status=In Progress');
-    } else if (s.id === 'completed') {
-      navigate('/tasks?status=Completed');
+    } else if (s.id === 'awaiting-info') {
+      navigate('/tasks?status=Awaiting Info');
+    } else if (s.id === 'under-review') {
+      navigate('/tasks?status=Under Review');
     }
   };
 
@@ -221,7 +221,7 @@ export function DashboardPage() {
         </motion.div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -255,27 +255,97 @@ export function DashboardPage() {
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.35 }}
+          transition={{ duration: 0.3, delay: 0.32 }}
           className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col shadow-sm"
         >
           <div className="flex items-center gap-2.5 p-4 border-b border-gray-200">
-            <Users size={15} className="text-purple-600" />
-            <h3 className="text-[14px] font-semibold flex-1">Team Workload</h3>
+            <ShieldAlert size={15} className="text-amber-600" />
+            <h3 className="text-[14px] font-semibold flex-1">Awaiting Client Info</h3>
+            <span className="bg-amber-50 text-amber-600 px-2 py-0.5 rounded-md text-[11px] font-bold">{awaitingInfo.length}</span>
           </div>
-          <div className="p-4.5 overflow-y-auto max-h-[300px]">
-            {users.map(u => {
-              const ut = tasks.filter(t => t.assigneeId === u.id && t.status !== 'Completed');
-              const max = Math.max(...users.map(x => tasks.filter(t => t.assigneeId === x.id && t.status !== 'Completed').length), 1);
+          <div className="overflow-y-auto max-h-[300px]">
+            {awaitingInfo.length === 0 && <div className="flex flex-col items-center justify-center p-8 text-gray-500"><p>No tasks blocked by clients.</p></div>}
+            {awaitingInfo.slice(0, 5).map(t => {
+              const c = clients.find(x => x.id === t.clientId);
+              const a = users.find(x => x.id === t.assigneeId);
               return (
-                <div key={u.id} className="mb-3 last:mb-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Avatar user={u} size={24} />
-                    <span className="text-[13px] font-medium flex-1">{u.name}</span>
-                    <span className="text-[12px] text-gray-500">{ut.length} active</span>
+                <div key={t.id} className="flex items-center gap-2.5 px-4.5 py-2.5 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => openEditTask(t)}>
+                  <TypeChip type={t.type} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono text-gray-400">#{t.id}</span>
+                      <div className="font-medium text-[13px] truncate text-gray-900">{t.title}</div>
+                    </div>
+                    <div className="text-[11px] text-gray-500">{c?.name || '—'}</div>
                   </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct(ut.length, max)}%`, background: u.color }} />
+                  <Avatar user={a} size={24} />
+                  <button 
+                    className="ml-2 px-2 py-1 rounded-md border border-gray-200 text-[10px] font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
+                    onClick={(e) => { e.stopPropagation(); openEditTask(t); }}
+                  >
+                    Follow Up
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.35 }}
+          className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col shadow-sm lg:col-span-2"
+        >
+          <div className="flex items-center gap-2.5 p-4 border-b border-gray-200">
+            <Users size={15} className="text-purple-600" />
+            <h3 className="text-[14px] font-semibold flex-1">Team Workload & Insights</h3>
+          </div>
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {users.map(u => {
+              const uTasks = tasks.filter(t => t.assigneeId === u.id && t.status !== 'Completed');
+              const uOverdue = uTasks.filter(t => (daysLeft(t.dueDate) ?? 0) < 0);
+              const uDueSoon = uTasks.filter(t => (daysLeft(t.dueDate) ?? -1) >= 0 && (daysLeft(t.dueDate) ?? 8) <= 7);
+              const uAwaiting = uTasks.filter(t => t.status === 'Awaiting Info');
+              
+              return (
+                <div key={u.id} className="border border-gray-100 rounded-xl p-3.5 hover:shadow-md transition-shadow bg-gray-50/30 flex flex-col">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Avatar user={u} size={32} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-bold text-gray-900 truncate">{u.name}</div>
+                      <div className="text-[11px] text-gray-500 truncate">{u.designation}</div>
+                    </div>
                   </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 mb-4 flex-1">
+                    <div className="bg-white border border-gray-100 rounded-lg p-2 flex flex-col items-center justify-center">
+                      <span className="text-[18px] font-bold text-gray-700">{uTasks.length}</span>
+                      <span className="text-[10px] text-gray-500 uppercase font-semibold">Active</span>
+                    </div>
+                    <div className="bg-red-50 border border-red-100 rounded-lg p-2 flex flex-col items-center justify-center">
+                      <span className="text-[18px] font-bold text-red-600">{uOverdue.length}</span>
+                      <span className="text-[10px] text-red-600/80 uppercase font-semibold">Overdue</span>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-2 flex flex-col items-center justify-center">
+                      <span className="text-[18px] font-bold text-blue-600">{uDueSoon.length}</span>
+                      <span className="text-[10px] text-blue-600/80 uppercase font-semibold">Due Soon</span>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-100 rounded-lg p-2 flex flex-col items-center justify-center">
+                      <span className="text-[18px] font-bold text-amber-600">{uAwaiting.length}</span>
+                      <span className="text-[10px] text-amber-600/80 uppercase font-semibold">Blocked</span>
+                    </div>
+                  </div>
+                  
+                  <button 
+                    onClick={() => navigate(`/tasks?assignee=${u.id}`)}
+                    className="w-full py-2 bg-white border border-gray-200 rounded-lg text-[12px] font-semibold text-gray-700 hover:bg-gray-50 hover:text-blue-600 transition-colors flex items-center justify-center gap-1"
+                  >
+                    View Tasks <ArrowRight size={12} />
+                  </button>
                 </div>
               );
             })}

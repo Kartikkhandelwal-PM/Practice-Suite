@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { Plus, Search, Edit2, Trash2, ChevronLeft, Users, GitMerge, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
 import { Toggle } from '../components/ui/Toggle';
@@ -15,6 +16,7 @@ import { PageHeader } from '../components/ui/PageHeader';
 export function ClientsPage() {
   const { clients, setClients, users, tasks } = useApp();
   const toast = useToast();
+  const { confirm } = useConfirm();
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
@@ -64,8 +66,8 @@ export function ClientsPage() {
     setForm(null);
   };
 
-  const del = (id: string) => {
-    if (confirm('Delete client?')) {
+  const del = async (id: string) => {
+    if (await confirm({ title: 'Delete Client', message: 'Are you sure you want to delete this client?', danger: true })) {
       setClients(c => c.filter(x => x.id !== id));
       toast('Client deleted');
     }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { Plus, Calendar as CalendarIcon, List, Video, MapPin, Clock, Users, ChevronLeft, ChevronRight, ExternalLink, MoreVertical, Search, Filter, Trash2, Edit2, Info, CheckCircle2, Zap } from 'lucide-react';
 import { PageHeader } from '../components/ui/PageHeader';
 import { motion, AnimatePresence } from 'motion/react';
@@ -23,6 +24,7 @@ const PLATFORMS = [
 export function MeetingCalendarPage() {
   const { meetings, setMeetings, clients, users } = useApp();
   const toast = useToast();
+  const { confirm } = useConfirm();
   const [view, setView] = useState<'calendar' | 'list' | 'upcoming'>('upcoming');
   const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export function MeetingCalendarPage() {
 
   const openNew = (date?: Date) => {
     const d = date || today;
-    setForm({ id: genId(), title: '', clientId: '', type: 'Video Call', platform: 'google_meet', meetLink: '', date: fmt(d), time: '10:00', duration: 60, attendees: ['u1'], description: '', status: 'scheduled' });
+    setForm({ id: genId(), title: '', clientId: '', type: 'Video Call', platform: 'google_meet', meetLink: '', date: fmt(d), time: '10:00', duration: 60, attendees: ['u1'], description: '', notes: '', status: 'scheduled' });
     setIsModalOpen(true);
   };
   
@@ -71,8 +73,8 @@ export function MeetingCalendarPage() {
     setForm(null);
   };
 
-  const delMeeting = (id: string) => {
-    if (confirm('Delete meeting?')) {
+  const delMeeting = async (id: string) => {
+    if (await confirm({ title: 'Delete Meeting', message: 'Are you sure you want to delete this meeting?', danger: true })) {
       setMeetings(m => m.filter(x => x.id !== id));
       toast('Meeting deleted');
     }
@@ -119,12 +121,6 @@ export function MeetingCalendarPage() {
               <CalendarIcon size={16} /> Calendar
             </button>
           </div>
-          <button 
-            onClick={() => openNew()}
-            className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl text-[13px] font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 active:scale-95"
-          >
-            <Plus size={18} /> Schedule Meeting
-          </button>
         </div>
       </div>
 
@@ -402,9 +398,15 @@ export function MeetingCalendarPage() {
                         );
                       })
                     ) : (
-                      <div className="text-center py-12 bg-gray-50 rounded-xl">
+                      <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
                         <CalendarIcon size={48} className="text-gray-200 mx-auto mb-3" />
-                        <p className="text-[14px] text-gray-400 font-medium">No meetings scheduled for today</p>
+                        <p className="text-[14px] text-gray-400 font-medium mb-4">No meetings scheduled for today</p>
+                        <button 
+                          onClick={() => openNew(today)}
+                          className="bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 px-4 py-2 rounded-xl text-[13px] font-bold inline-flex items-center gap-2 transition-all shadow-sm"
+                        >
+                          <Plus size={16} /> Schedule Meeting
+                        </button>
                       </div>
                     )}
                   </div>
@@ -579,12 +581,21 @@ export function MeetingCalendarPage() {
                   </div>
                 )}
                 <div className="md:col-span-2">
-                  <label className="block text-[12px] font-bold text-gray-500 uppercase tracking-widest mb-2">Agenda / Notes</label>
+                  <label className="block text-[12px] font-bold text-gray-500 uppercase tracking-widest mb-2">Agenda</label>
                   <textarea 
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50 transition-all min-h-[100px]" 
-                    placeholder="Agenda, notes, etc..."
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50 transition-all min-h-[80px]" 
+                    placeholder="Meeting agenda..."
                     value={form.description || ''}
                     onChange={e => setForm({ ...form, description: e.target.value })}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-[12px] font-bold text-gray-500 uppercase tracking-widest mb-2">Meeting Notes / MOM</label>
+                  <textarea 
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50 transition-all min-h-[120px]" 
+                    placeholder="Write meeting notes or minutes of meeting here..."
+                    value={form.notes || ''}
+                    onChange={e => setForm({ ...form, notes: e.target.value })}
                   />
                 </div>
               </div>

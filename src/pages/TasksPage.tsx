@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { daysLeft, STATUS_COLORS, PRIORITY_COLORS } from '../utils';
 import { Plus, Search, ChevronDown, ChevronUp, Check, Trash2, Maximize2, ListTodo, GitMerge, Filter, Calendar, X, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -16,6 +17,7 @@ import { PageHeader } from '../components/ui/PageHeader';
 export function TasksPage() {
   const { tasks, setTasks, clients, users, taskTypes } = useApp();
   const toast = useToast();
+  const { confirm } = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [search, setSearch] = useState(searchParams.get('search') || '');
@@ -35,7 +37,9 @@ export function TasksPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showSubtasks, setShowSubtasks] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(
+    !!(searchParams.get('status') || searchParams.get('client') || searchParams.get('type') || searchParams.get('issueType') || searchParams.get('priority') || searchParams.get('assignee') || searchParams.get('start') || searchParams.get('end'))
+  );
   
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -79,6 +83,7 @@ export function TasksPage() {
     let t = tasks;
     if (tab === 'mine') t = t.filter(x => x.assigneeId === 'u1'); // Assuming u1 is current user
     if (tab === 'overdue') t = t.filter(x => x.status !== 'Completed' && (daysLeft(x.dueDate) ?? 0) < 0);
+    if (tab === 'due-soon') t = t.filter(x => x.status !== 'Completed' && (daysLeft(x.dueDate) ?? -1) >= 0 && (daysLeft(x.dueDate) ?? 8) <= 7);
     if (tab === 'recurring') t = t.filter(x => x.recurring && x.recurring !== 'One-time');
     if (tab === 'completed') t = t.filter(x => x.status === 'Completed');
     
@@ -121,8 +126,8 @@ export function TasksPage() {
     toast(`${selected.length} tasks marked complete`, 'success');
   };
   
-  const bulkDelete = () => {
-    if (confirm(`Delete ${selected.length} tasks?`)) {
+  const bulkDelete = async () => {
+    if (await confirm({ title: 'Delete Tasks', message: `Are you sure you want to delete ${selected.length} tasks?`, danger: true })) {
       setTasks(tasks.filter(t => !selected.includes(t.id)));
       clearSelect();
       toast('Tasks deleted');
@@ -163,12 +168,27 @@ export function TasksPage() {
 
         <button 
           onClick={() => setShowFilters(!showFilters)}
-          className={`px-3 py-1.5 border rounded-lg text-[12.5px] font-medium flex items-center gap-2 transition-all ${showFilters || filterStatus || filterClient || filterType || filterIssueType || filterPriority || filterAssignee || dateStart || dateEnd ? 'border-blue-200 bg-blue-50 text-blue-600' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400'}`}
+          className={`px-3 py-1.5 border rounded-lg text-[12.5px] font-medium flex items-center gap-2 transition-all ${showFilters || filterStatus || filterClient || filterType || filterIssueType || filterPriority || filterAssignee || dateStart || dateEnd || tab !== 'all' ? 'border-blue-200 bg-blue-50 text-blue-600' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400'}`}
         >
           <Filter size={14} />
-          Filters {(filterStatus || filterClient || filterType || filterIssueType || filterPriority || filterAssignee || dateStart || dateEnd) ? '(Active)' : ''}
+          Filters {(filterStatus || filterClient || filterType || filterIssueType || filterPriority || filterAssignee || dateStart || dateEnd || tab !== 'all') ? '(Active)' : ''}
           {showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
+
+        {tab !== 'all' && (
+          <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg text-[12px] font-medium border border-blue-200">
+            <span>
+              {tab === 'overdue' ? 'Overdue Tasks' : 
+               tab === 'due-soon' ? 'Due This Week' : 
+               tab === 'mine' ? 'My Tasks' : 
+               tab === 'recurring' ? 'Recurring Tasks' : 
+               tab === 'completed' ? 'Completed Tasks' : tab}
+            </span>
+            <button onClick={() => setTab('all')} className="hover:bg-blue-200 p-0.5 rounded-full transition-colors">
+              <X size={12} />
+            </button>
+          </div>
+        )}
 
         <div className="ml-auto flex items-center gap-4">
           <label className="flex items-center gap-2 text-[12.5px] text-gray-600 cursor-pointer hover:text-gray-900">
@@ -254,7 +274,7 @@ export function TasksPage() {
                   onClick={() => { 
                     setSearch(''); setFilterStatus(''); setFilterClient(''); setFilterType(''); 
                     setFilterIssueType(''); setFilterPriority(''); setFilterAssignee('');
-                    setDateStart(''); setDateEnd('');
+                    setDateStart(''); setDateEnd(''); setTab('all');
                   }}
                 >
                   <X size={14} /> Reset All
@@ -447,8 +467,8 @@ export function TasksPage() {
                         <button className="w-[26px] h-[26px] rounded flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-gray-900 transition-colors" onClick={() => openEditTask(t)}>
                           <Maximize2 size={13} />
                         </button>
-                        <button className="w-[26px] h-[26px] rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => {
-                          if (confirm('Delete task?')) {
+                        <button className="w-[26px] h-[26px] rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={async () => {
+                          if (await confirm({ title: 'Delete Task', message: 'Are you sure you want to delete this task?', danger: true })) {
                             setTasks(tasks.filter(x => x.id !== t.id));
                             toast('Task deleted');
                           }
@@ -564,8 +584,8 @@ export function TasksPage() {
                             <button className="w-[26px] h-[26px] rounded flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-gray-900 transition-colors" onClick={() => openEditTask(s)}>
                               <Maximize2 size={13} />
                             </button>
-                            <button className="w-[26px] h-[26px] rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => {
-                              if (confirm('Delete subtask?')) {
+                            <button className="w-[26px] h-[26px] rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={async () => {
+                              if (await confirm({ title: 'Delete Subtask', message: 'Are you sure you want to delete this subtask?', danger: true })) {
                                 setTasks(tasks.filter(x => x.id !== s.id));
                                 toast('Subtask deleted');
                               }

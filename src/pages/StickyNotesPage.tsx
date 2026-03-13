@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { Plus, Search, Star, Trash2, StickyNote as StickyNoteIcon, X, Clock, Zap } from 'lucide-react';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Modal } from '../components/ui/Modal';
@@ -12,6 +13,7 @@ import { Note } from '../types';
 export function StickyNotesPage() {
   const { notes, setNotes, users, notify } = useApp();
   const toast = useToast();
+  const { confirm } = useConfirm();
 
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState(false);
@@ -91,7 +93,10 @@ export function StickyNotesPage() {
           </button>
           <button 
             className="w-6 h-6 rounded flex items-center justify-center text-black/30 hover:text-black/60 transition-colors"
-            onClick={() => { if (confirm('Delete note?')) del(n.id); }}
+            onClick={async (e) => { 
+              e.stopPropagation();
+              if (await confirm({ title: 'Delete Note', message: 'Are you sure you want to delete this note?', danger: true })) del(n.id); 
+            }}
           >
             <Trash2 size={13} />
           </button>

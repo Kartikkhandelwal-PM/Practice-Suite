@@ -35,6 +35,8 @@ interface AppContextType {
   setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   isAuthenticated: boolean;
   setIsAuthenticated: React.Dispatch<React.SetStateAction<boolean>>;
+  currentUser: User | null;
+  setCurrentUser: React.Dispatch<React.SetStateAction<User | null>>;
   notify: (userId: string, text: string, type: AppNotification['type'], link?: string) => void;
 }
 
@@ -62,6 +64,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   ]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(INIT_USERS[0]);
 
   const notify = (userId: string, text: string, type: AppNotification['type'], link?: string) => {
     const newNotif: AppNotification = {
@@ -94,6 +97,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       notifications, setNotifications,
       sidebarCollapsed, setSidebarCollapsed,
       isAuthenticated, setIsAuthenticated,
+      currentUser, setCurrentUser,
       notify
     }}>
       {children}

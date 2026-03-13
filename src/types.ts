@@ -138,6 +138,7 @@ export interface Email {
   labels?: string[];
   taskLinked: string | null;
   attachments: string[];
+  folder?: 'inbox' | 'sent' | 'drafts' | 'trash';
 }
 
 export interface Note {
@@ -196,6 +197,7 @@ export interface Meeting {
   duration: number;
   attendees: string[];
   description: string;
+  notes?: string;
   status: string;
 }
 

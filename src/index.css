@@ -1,8 +1,15 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Fraunces", ui-serif, Georgia, serif;
+}
+
+@layer base {
+  .prose mark {
+    @apply bg-yellow-200 text-yellow-900 px-1 rounded-sm;
+  }
 }
 
 @layer utilities {

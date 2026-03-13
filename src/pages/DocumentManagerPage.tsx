@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
-import { Plus, Search, Folder, FolderOpen, FileText, Upload, Trash2, Download, Copy, X, Building2, Clock, Zap, CheckCircle2 } from 'lucide-react';
+import { useConfirm } from '../context/ConfirmContext';
+import { Plus, Search, Folder, FolderOpen, FileText, Upload, Trash2, Download, Copy, X, Building2, Clock, Zap, CheckCircle2, ExternalLink, FileImage, FileSpreadsheet, FileVideo, FileAudio, FileArchive, FileCode, File } from 'lucide-react';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Modal } from '../components/ui/Modal';
 import { TagInput } from '../components/ui/TagInput';
@@ -11,6 +12,7 @@ import { Document, Folder as FolderType } from '../types';
 export function DocumentManagerPage() {
   const { docs, setDocs, folders, setFolders, clients, users } = useApp();
   const toast = useToast();
+  const { confirm } = useConfirm();
 
   const [activeSelection, setActiveSelection] = useState<{ type: 'all' | 'folder' | 'client', id?: string }>({ type: 'all' });
   const [search, setSearch] = useState('');
@@ -23,11 +25,45 @@ export function DocumentManagerPage() {
   const [expandedFolders, setExpandedFolders] = useState<string[]>(['f1', 'f2', 'f3']);
   const [expandedClients, setExpandedClients] = useState<string[]>([]);
 
-  const FILE_ICONS: Record<string, string> = { pdf: '#dc2626', xlsx: '#059669', docx: '#2563eb', pptx: '#ea580c', txt: '#6b7280', default: '#9ca3af' };
-  const getFileColor = (type: string) => FILE_ICONS[type] || FILE_ICONS.default;
+  const FILE_ICONS: Record<string, string> = { pdf: '#dc2626', xlsx: '#059669', csv: '#059669', docx: '#2563eb', pptx: '#ea580c', txt: '#6b7280', png: '#8b5cf6', jpg: '#8b5cf6', jpeg: '#8b5cf6', mp4: '#ec4899', mp3: '#14b8a6', zip: '#f59e0b', default: '#9ca3af' };
+  const getFileColor = (type: string) => FILE_ICONS[type.toLowerCase()] || FILE_ICONS.default;
+
+  const getFileIcon = (type: string) => {
+    const t = type.toLowerCase();
+    if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(t)) return <FileImage size={20} />;
+    if (['xlsx', 'xls', 'csv'].includes(t)) return <FileSpreadsheet size={20} />;
+    if (['mp4', 'mov', 'avi'].includes(t)) return <FileVideo size={20} />;
+    if (['mp3', 'wav'].includes(t)) return <FileAudio size={20} />;
+    if (['zip', 'rar', 'tar', 'gz'].includes(t)) return <FileArchive size={20} />;
+    if (['html', 'css', 'js', 'ts', 'json'].includes(t)) return <FileCode size={20} />;
+    if (['pdf', 'docx', 'doc', 'txt'].includes(t)) return <FileText size={20} />;
+    return <File size={20} />;
+  };
 
   const allTags = [...new Set(docs.flatMap(d => d.tags || []))];
   
+  const handleOpen = (doc: Document) => {
+    const content = `Dummy content for ${doc.name}\nType: ${doc.type}\nSize: ${doc.size}`;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    toast(`Opened ${doc.name}`);
+  };
+
+  const handleDownload = (doc: Document) => {
+    const content = `Dummy content for ${doc.name}\nType: ${doc.type}\nSize: ${doc.size}`;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = doc.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast(`Downloaded ${doc.name}`);
+  };
+
   const filteredDocs = docs.filter(d => {
     if (activeSelection.type === 'folder') {
       if (d.folderId !== activeSelection.id) return false;
@@ -73,13 +109,22 @@ export function DocumentManagerPage() {
           )}
           <span className="flex-1 truncate">{folder.name}</span>
           <span className="text-[10px] text-gray-400 font-medium">{docs.filter(d => d.folderId === folder.id).length}</span>
-          <button 
-            className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => { e.stopPropagation(); delFolder(folder.id); }}
-            title="Delete Folder"
-          >
-            <Trash2 size={12} />
-          </button>
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button 
+              className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-blue-600"
+              onClick={(e) => { e.stopPropagation(); newFolder(folder.id); }}
+              title="Add Subfolder"
+            >
+              <Plus size={12} />
+            </button>
+            <button 
+              className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-600"
+              onClick={(e) => { e.stopPropagation(); delFolder(folder.id); }}
+              title="Delete Folder"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
         </div>
         {isExpanded && childFolders(folder.id).map(cf => <FolderItem key={cf.id} folder={cf} depth={depth + 1} />)}
       </div>
@@ -110,15 +155,15 @@ export function DocumentManagerPage() {
     setForm(null);
   };
   
-  const delDoc = (id: string) => {
-    if (confirm('Delete document?')) {
+  const delDoc = async (id: string) => {
+    if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This action cannot be undone.', danger: true })) {
       setDocs(d => d.filter(x => x.id !== id));
       toast('Document deleted');
     }
   };
   
-  const delFolder = (id: string) => {
-    if (confirm('Delete folder and all its contents?')) {
+  const delFolder = async (id: string) => {
+    if (await confirm({ title: 'Delete Folder', message: 'Delete folder and all its contents? This action cannot be undone.', danger: true })) {
       setFolders(f => f.filter(x => x.id !== id && x.parentId !== id));
       setDocs(d => d.filter(x => x.folderId !== id));
       if (activeSelection.type === 'folder' && activeSelection.id === id) {
@@ -128,11 +173,11 @@ export function DocumentManagerPage() {
     }
   };
   
-  const newFolder = () => {
+  const newFolder = (parentId?: string) => {
     setFolderForm({ 
       id: genId(), 
       name: '', 
-      parentId: activeSelection.type === 'folder' ? activeSelection.id! : null, 
+      parentId: parentId || (activeSelection.type === 'folder' ? activeSelection.id! : null), 
       clientId: activeSelection.type === 'client' ? activeSelection.id! : '', 
       icon: 'folder' 
     });
@@ -153,7 +198,7 @@ export function DocumentManagerPage() {
         description="Securely store and organize client documents and files."
         action={
           <div className="flex items-center gap-2">
-            <button className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-3.5 py-2 rounded-lg text-[13px] font-medium flex items-center gap-1.5 transition-colors" onClick={newFolder}>
+            <button className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-3.5 py-2 rounded-lg text-[13px] font-medium flex items-center gap-1.5 transition-colors" onClick={() => newFolder()}>
               <Folder size={15} /> New Folder
             </button>
             <button className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-lg text-[13px] font-medium flex items-center gap-1.5 transition-colors" onClick={openUpload}>
@@ -259,11 +304,11 @@ export function DocumentManagerPage() {
                   <div key={d.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-blue-300 transition-all group bg-white">
                     <div className="flex items-start gap-3 mb-3">
                       <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: fc + '18', color: fc }}>
-                        <FileText size={20} />
+                        {getFileIcon(d.type)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-[13px] text-gray-900 truncate" title={d.name}>{d.name}</div>
-                        <div className="text-[11px] text-gray-500 mt-0.5 uppercase tracking-wider">{d.type} • {d.size}</div>
+                        <div className="text-[11px] text-gray-500 mt-0.5 uppercase tracking-wider font-bold" style={{ color: fc }}>{d.type} <span className="text-gray-400 font-medium ml-1">• {d.size}</span></div>
                       </div>
                       <button className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={() => delDoc(d.id)}>
                         <Trash2 size={13} />
@@ -286,11 +331,11 @@ export function DocumentManagerPage() {
                     </div>
                     
                     <div className="flex gap-2 pt-3 border-t border-gray-100">
-                      <button className="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-700 py-1.5 rounded-lg text-[11.5px] font-medium flex items-center justify-center gap-1.5 transition-colors">
-                        <Download size={12} /> Download
+                      <button className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 py-1.5 rounded-lg text-[11.5px] font-bold flex items-center justify-center gap-1.5 transition-colors" onClick={() => handleOpen(d)}>
+                        <ExternalLink size={12} /> Open
                       </button>
-                      <button className="w-8 h-8 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg flex items-center justify-center transition-colors">
-                        <Copy size={12} />
+                      <button className="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-700 py-1.5 rounded-lg text-[11.5px] font-bold flex items-center justify-center gap-1.5 transition-colors" onClick={() => handleDownload(d)}>
+                        <Download size={12} /> Download
                       </button>
                     </div>
                   </div>

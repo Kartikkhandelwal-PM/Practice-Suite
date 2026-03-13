@@ -14,10 +14,11 @@ import { MentionTextarea } from './MentionTextarea';
 
 interface TaskModalProps {
   task?: Task | null;
+  templateId?: string;
   onClose: () => void;
 }
 
-export function TaskModal({ task, onClose }: TaskModalProps) {
+export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
   const { tasks, setTasks, clients, users, templates, taskTypes, notify } = useApp();
   const toast = useToast();
 
@@ -44,9 +45,33 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
     activity: [{ text: 'Task created', at: fmt(today) }]
   });
 
-  const [selectedTemplate, setSelectedTemplate] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState(templateId || '');
   const [newComment, setNewComment] = useState('');
-  const [pendingSubtasks, setPendingSubtasks] = useState<Partial<Task>[]>([]);
+  const [pendingSubtasks, setPendingSubtasks] = useState<Partial<Task>[]>(() => {
+    if (task && !task.id && task.subtasks) {
+      let max = 0;
+      tasks.forEach(t => {
+        if (t.id.startsWith('KDK-')) {
+          const num = parseInt(t.id.split('-')[1], 10);
+          if (!isNaN(num) && num > max) max = num;
+        }
+      });
+      let currentMax = max;
+      return task.subtasks.map(s => {
+        currentMax++;
+        return {
+          id: `KDK-${currentMax}`,
+          title: s.title,
+          status: s.done ? 'Completed' : 'To Do',
+          priority: task.priority,
+          assigneeId: task.assigneeId,
+          dueDate: task.dueDate,
+          issueType: 'Subtask'
+        };
+      });
+    }
+    return [];
+  });
   const [activeTab, setActiveTab] = useState<'details' | 'subtasks' | 'comments' | 'activity' | 'attachments'>('details');
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
 
@@ -61,7 +86,6 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
     }
     
     if (isNew) {
-      // Find max ID for KDK prefix
       let max = 0;
       tasks.forEach(t => {
         if (t.id.startsWith('KDK-')) {
@@ -69,15 +93,19 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
           if (!isNaN(num) && num > max) max = num;
         }
       });
+      pendingSubtasks.forEach(pst => {
+        if (pst.id && pst.id.startsWith('KDK-')) {
+          const num = parseInt(pst.id.split('-')[1], 10);
+          if (!isNaN(num) && num > max) max = num;
+        }
+      });
       const newId = `KDK-${max + 1}`;
       const newTask = { ...form, id: newId };
       const newTasks = [newTask];
       
-      let currentMax = max + 1;
       pendingSubtasks.forEach((pst) => {
-        currentMax++;
         newTasks.push({
-          id: `KDK-${currentMax}`,
+          id: pst.id!,
           title: pst.title || 'Untitled Subtask',
           clientId: form.clientId,
           type: form.type,
@@ -142,31 +170,41 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
       }));
       
       if (tmpl.subtasks && tmpl.subtasks.length > 0) {
-        const templateSubtasks: Partial<Task>[] = tmpl.subtasks.map(title => ({
-          title,
-          status: 'To Do',
-          priority: form.priority,
-          assigneeId: form.assigneeId,
-          dueDate: form.dueDate,
-          issueType: 'Subtask'
-        }));
+        let max = 0;
+        tasks.forEach(t => {
+          if (t.id.startsWith('KDK-')) {
+            const num = parseInt(t.id.split('-')[1], 10);
+            if (!isNaN(num) && num > max) max = num;
+          }
+        });
+        pendingSubtasks.forEach(pst => {
+          if (pst.id && pst.id.startsWith('KDK-')) {
+            const num = parseInt(pst.id.split('-')[1], 10);
+            if (!isNaN(num) && num > max) max = num;
+          }
+        });
+        
+        let currentMax = max;
+        const templateSubtasks: Partial<Task>[] = tmpl.subtasks.map(title => {
+          currentMax++;
+          return {
+            id: `KDK-${currentMax}`,
+            title,
+            status: 'To Do',
+            priority: form.priority,
+            assigneeId: form.assigneeId,
+            dueDate: form.dueDate,
+            issueType: 'Subtask'
+          };
+        });
 
         if (isNew) {
           setPendingSubtasks(prev => [...prev, ...templateSubtasks]);
-          toast(`${tmpl.subtasks.length} subtasks added to pending list`, 'success');
+          toast(`${tmpl.subtasks.length} subtasks added`, 'success');
         } else {
-          let max = 0;
-          tasks.forEach(t => {
-            if (t.id.startsWith('KDK-')) {
-              const num = parseInt(t.id.split('-')[1], 10);
-              if (!isNaN(num) && num > max) max = num;
-            }
-          });
-          let currentMax = max;
           const newSubtasks = templateSubtasks.map(pst => {
-            currentMax++;
             return {
-              id: `KDK-${currentMax}`,
+              id: pst.id!,
               title: pst.title!,
               clientId: form.clientId,
               type: tmpl.category,
@@ -251,8 +289,25 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
   const createQuickSubtask = () => {
     if (!newSubtaskTitle.trim()) return;
 
+    let max = 0;
+    tasks.forEach(t => {
+      if (t.id.startsWith('KDK-')) {
+        const num = parseInt(t.id.split('-')[1], 10);
+        if (!isNaN(num) && num > max) max = num;
+      }
+    });
+    pendingSubtasks.forEach(pst => {
+      if (pst.id && pst.id.startsWith('KDK-')) {
+        const num = parseInt(pst.id.split('-')[1], 10);
+        if (!isNaN(num) && num > max) max = num;
+      }
+    });
+    
+    const newId = `KDK-${max + 1}`;
+
     if (isNew) {
       setPendingSubtasks(prev => [...prev, { 
+        id: newId,
         title: newSubtaskTitle, 
         status: 'To Do', 
         priority: form.priority, 
@@ -264,15 +319,6 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
       return;
     }
 
-    let max = 0;
-    tasks.forEach(t => {
-      if (t.id.startsWith('KDK-')) {
-        const num = parseInt(t.id.split('-')[1], 10);
-        if (!isNaN(num) && num > max) max = num;
-      }
-    });
-    const newId = `KDK-${max + 1}`;
-    
     const newTask: Task = {
       id: newId,
       title: newSubtaskTitle,
@@ -480,27 +526,27 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                     </button>
                   </div>
 
-                  <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                  <div className="border border-gray-200 rounded-xl bg-white shadow-sm">
                     {(childTasks.length > 0 || pendingSubtasks.length > 0) ? (
                       <div className="divide-y divide-gray-100">
                         {pendingSubtasks.map((pst, idx) => (
-                          <div key={`pending-${idx}`} className="flex items-center gap-3 p-3.5 bg-blue-50/30 group">
+                          <div key={`pending-${idx}`} className="relative focus-within:z-10 flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors group">
                             <input 
                               type="checkbox" 
                               className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" 
                               checked={pst.status === 'Completed'} 
                               onChange={e => setPendingSubtasks(prev => prev.map((p, i) => i === idx ? { ...p, status: e.target.checked ? 'Completed' : 'To Do' } : p))} 
                             />
-                            <div className="flex-1 min-w-0">
+                            <div className="flex-1 min-w-0 flex items-center gap-2">
+                              <span className="text-[10px] font-mono text-gray-400">#{pst.id || 'NEW'}</span>
                               <input 
-                                className={`w-full bg-transparent border-none p-0 text-[13px] outline-none focus:ring-0 font-medium ${pst.status === 'Completed' ? 'line-through text-blue-400' : 'text-blue-800'}`} 
+                                className={`w-full bg-transparent border-none p-0 text-[13px] outline-none focus:ring-0 font-medium ${pst.status === 'Completed' ? 'line-through text-gray-400' : 'text-gray-900'}`} 
                                 value={pst.title} 
                                 onChange={e => setPendingSubtasks(prev => prev.map((p, i) => i === idx ? { ...p, title: e.target.value } : p))} 
                               />
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider whitespace-nowrap">Pending Save</span>
-                              <div className="w-[100px] opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="w-[120px]">
                                 <SearchableSelect 
                                   options={userOptions} 
                                   value={pst.assigneeId || ''} 
@@ -515,14 +561,15 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                           </div>
                         ))}
                         {childTasks.map((s) => (
-                          <div key={s.id} className="flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors group">
+                          <div key={s.id} className="relative focus-within:z-10 flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors group">
                             <input 
                               type="checkbox" 
                               className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" 
                               checked={s.status === 'Completed'} 
                               onChange={e => setTasks(tasks.map(t => t.id === s.id ? { ...t, status: e.target.checked ? 'Completed' : 'To Do' } : t))} 
                             />
-                            <div className="flex-1 min-w-0">
+                            <div className="flex-1 min-w-0 flex items-center gap-2">
+                              <span className="text-[10px] font-mono text-gray-400">#{s.id}</span>
                               <input 
                                 className={`w-full bg-transparent border-none p-0 text-[13px] outline-none focus:ring-0 ${s.status === 'Completed' ? 'line-through text-gray-400' : 'text-gray-900 font-medium'}`} 
                                 value={s.title} 
@@ -530,11 +577,11 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                                 placeholder="Subtask title" 
                               />
                             </div>
-                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <div className="w-[100px]">
+                            <div className="flex items-center gap-2">
+                              <div className="w-[120px]">
                                 <SearchableSelect options={userOptions} value={s.assigneeId || ''} onChange={v => setTasks(tasks.map(t => t.id === s.id ? { ...t, assigneeId: v } : t))} placeholder="Assignee" />
                               </div>
-                              <button className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => { if(confirm('Delete subtask?')) setTasks(tasks.filter(t => t.id !== s.id)) }}>
+                              <button className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100" onClick={() => { if(confirm('Delete subtask?')) setTasks(tasks.filter(t => t.id !== s.id)) }}>
                                 <Trash2 size={14} />
                               </button>
                             </div>

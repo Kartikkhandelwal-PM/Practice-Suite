@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { Settings, Users, Bell, Link as LinkIcon, Shield, Plus, Edit2, Trash2, Check, X, Mail, Sliders, ShieldCheck, Zap, Clock } from 'lucide-react';
 import { PageHeader } from '../components/ui/PageHeader';
 import { User, TaskTypeConfig, Workflow } from '../types';
@@ -12,6 +13,7 @@ import { IconRenderer } from '../components/ui/IconRenderer';
 export function SettingsPage() {
   const { users, setUsers, taskTypes, setTaskTypes, workflows, setWorkflows } = useApp();
   const toast = useToast();
+  const { confirm } = useConfirm();
 
   const [tab, setTab] = useState<'profile' | 'team' | 'integrations' | 'notifications' | 'configurations'>('team');
   const [userModal, setUserModal] = useState<'create' | 'edit' | null>(null);
@@ -48,8 +50,8 @@ export function SettingsPage() {
     setUserModal(null);
   };
 
-  const deleteUser = (id: string) => {
-    if (confirm('Delete this user?')) {
+  const deleteUser = async (id: string) => {
+    if (await confirm({ title: 'Delete User', message: 'Are you sure you want to delete this user?', danger: true })) {
       setUsers(users.filter(u => u.id !== id));
       toast('User deleted', 'success');
     }

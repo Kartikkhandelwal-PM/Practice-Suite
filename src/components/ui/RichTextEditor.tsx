@@ -1,10 +1,11 @@
+import React, { useEffect } from 'react';
 import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Highlight from '@tiptap/extension-highlight';
 import Mention from '@tiptap/extension-mention';
 import tippy, { Instance } from 'tippy.js';
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, Quote, Heading1, Heading2 } from 'lucide-react';
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, Quote, Heading1, Heading2, Highlighter } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { MentionList } from './MentionList';
 
@@ -16,6 +17,7 @@ interface RichTextEditorProps {
 
 export function RichTextEditor({ content, onChange, placeholder }: RichTextEditorProps) {
   const { users, notify } = useApp();
+  const [lastSentContent, setLastSentContent] = React.useState(content);
 
   const editor = useEditor({
     extensions: [
@@ -89,10 +91,11 @@ export function RichTextEditor({ content, onChange, placeholder }: RichTextEdito
     ],
     content,
     onUpdate: ({ editor }) => {
-      onChange(editor.getHTML());
+      const html = editor.getHTML();
+      setLastSentContent(html);
+      onChange(html);
       
       // Detect mentions in the current content
-      const html = editor.getHTML();
       const mentionRegex = /data-id="([^"]+)"/g;
       let match;
       while ((match = mentionRegex.exec(html)) !== null) {
@@ -107,6 +110,13 @@ export function RichTextEditor({ content, onChange, placeholder }: RichTextEdito
       },
     },
   });
+
+  useEffect(() => {
+    if (editor && content !== lastSentContent && content !== editor.getHTML()) {
+      editor.commands.setContent(content);
+      setLastSentContent(content);
+    }
+  }, [content, editor, lastSentContent]);
 
   if (!editor) {
     return null;
@@ -181,7 +191,13 @@ export function RichTextEditor({ content, onChange, placeholder }: RichTextEdito
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
           isActive={editor.isActive('blockquote')}
           icon={Quote}
-          title="Blockquote"
+          title="Quote"
+        />
+        <ToolbarButton
+          onClick={() => editor.chain().focus().toggleHighlight().run()}
+          isActive={editor.isActive('highlight')}
+          icon={Highlighter}
+          title="Note (Highlight)"
         />
       </div>
       <EditorContent editor={editor} />

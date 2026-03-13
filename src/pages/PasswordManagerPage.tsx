@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { Plus, Search, KeyRound, Edit2, Trash2, Users, Lock, Copy, Check, Eye, EyeOff, ShieldAlert, ExternalLink, Building2, ChevronRight, ChevronDown, Clock, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Modal } from '../components/ui/Modal';
@@ -10,6 +11,7 @@ import { Password } from '../types';
 export function PasswordManagerPage() {
   const { passwords, setPasswords, clients } = useApp();
   const toast = useToast();
+  const { confirm } = useConfirm();
 
   const [search, setSearch] = useState('');
   const [activeSelection, setActiveSelection] = useState<{ type: 'all' | 'client', id?: string }>({ type: 'all' });
@@ -80,8 +82,8 @@ export function PasswordManagerPage() {
     setForm(null);
   };
 
-  const del = (id: string) => {
-    if (confirm('Delete this credential?')) {
+  const del = async (id: string) => {
+    if (await confirm({ title: 'Delete Credential', message: 'Are you sure you want to delete this credential? This action cannot be undone.', danger: true })) {
       setPasswords(p => p.filter(x => x.id !== id));
       toast('Credential deleted');
     }
