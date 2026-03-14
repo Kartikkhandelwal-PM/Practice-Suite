@@ -7,11 +7,11 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { Modal } from '../components/ui/Modal';
 import { Toggle } from '../components/ui/Toggle';
 import { MentionTextarea } from '../components/ui/MentionTextarea';
-import { genId, fmt, today, NOTE_COLORS } from '../utils';
+import { genUUID, fmt, today, NOTE_COLORS } from '../utils';
 import { Note } from '../types';
 
 export function StickyNotesPage() {
-  const { notes, setNotes, users, notify } = useApp();
+  const { notes, users, notify, addNote, updateNote, deleteNote } = useApp();
   const toast = useToast();
   const { confirm } = useConfirm();
 
@@ -30,7 +30,7 @@ export function StickyNotesPage() {
 
   const openNew = () => {
     setForm({ 
-      id: genId(), 
+      id: genUUID(), 
       title: '', 
       content: '', 
       color: NOTE_COLORS[Math.floor(Math.random() * NOTE_COLORS.length)], 
@@ -46,26 +46,43 @@ export function StickyNotesPage() {
     setModal(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form?.title.trim() && !form?.content.trim()) { toast('Note is empty', 'error'); return; }
     const updated = { ...form, updatedAt: fmt(today) };
-    if (notes.find(n => n.id === form.id)) {
-      setNotes(n => n.map(x => x.id === form.id ? updated : x));
-    } else {
-      setNotes(n => [updated, ...n]);
+    try {
+      if (notes.find(n => n.id === form.id)) {
+        await updateNote(form.id, updated);
+      } else {
+        await addNote(updated);
+      }
+      toast('Note saved', 'success');
+      setModal(false);
+      setForm(null);
+    } catch (error) {
+      console.error('Error saving note:', error);
+      toast('Failed to save note', 'error');
     }
-    toast('Note saved', 'success');
-    setModal(false);
-    setForm(null);
   };
 
-  const del = (id: string) => {
-    setNotes(n => n.filter(x => x.id !== id));
-    toast('Note deleted');
+  const del = async (id: string) => {
+    try {
+      await deleteNote(id);
+      toast('Note deleted');
+    } catch (error) {
+      console.error('Error deleting note:', error);
+      toast('Failed to delete note', 'error');
+    }
   };
 
-  const togglePin = (id: string) => {
-    setNotes(n => n.map(x => x.id === id ? { ...x, pinned: !x.pinned } : x));
+  const togglePin = async (id: string) => {
+    const note = notes.find(n => n.id === id);
+    if (!note) return;
+    try {
+      await updateNote(id, { pinned: !note.pinned });
+    } catch (error) {
+      console.error('Error toggling pin:', error);
+      toast('Failed to update note', 'error');
+    }
   };
 
   const handleMention = (userId: string) => {
@@ -113,14 +130,14 @@ export function StickyNotesPage() {
         title="Sticky Notes" 
         description="Quick notes and reminders for your practice"
         action={
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-[14px] font-bold flex items-center gap-2 transition-all shadow-lg shadow-blue-200" onClick={openNew}>
-            <Plus size={18} /> New Note
+          <button className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[13px] sm:text-[14px] font-bold flex items-center gap-2 transition-all shadow-lg shadow-blue-200" onClick={openNew}>
+            <Plus size={18} /> <span className="hidden sm:inline">New Note</span><span className="sm:hidden">New</span>
           </button>
         }
       />
 
       <div className="mb-6">
-        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 w-[260px] focus-within:border-blue-600 transition-colors">
+        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 w-full sm:w-[260px] focus-within:border-blue-600 transition-colors">
           <Search size={14} className="text-gray-400 shrink-0" />
           <input 
             placeholder="Search notes..." 

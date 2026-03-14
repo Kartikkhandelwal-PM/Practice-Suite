@@ -2,63 +2,154 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { Settings, Users, Bell, Link as LinkIcon, Shield, Plus, Edit2, Trash2, Check, X, Mail, Sliders, ShieldCheck, Zap, Clock } from 'lucide-react';
+import { Settings, Users, Bell, Link as LinkIcon, Shield, Plus, Edit2, Trash2, Check, X, Mail, Sliders, ShieldCheck, Zap, Clock, LogOut } from 'lucide-react';
 import { PageHeader } from '../components/ui/PageHeader';
 import { User, TaskTypeConfig, Workflow } from '../types';
-import { genId } from '../utils';
+import { genUUID } from '../utils';
 import { Modal } from '../components/ui/Modal';
 import { Avatar } from '../components/ui/Avatar';
 import { IconRenderer } from '../components/ui/IconRenderer';
+import { supabase } from '../lib/supabase';
 
 export function SettingsPage() {
-  const { users, setUsers, taskTypes, setTaskTypes, workflows, setWorkflows } = useApp();
+  const { users, setUsers, taskTypes, workflows, setIsAuthenticated, isDemoMode, updateUser, addUser, deleteUser, updateTaskType, addTaskType, deleteTaskType, updateWorkflow, addWorkflow, deleteWorkflow } = useApp();
   const toast = useToast();
   const { confirm } = useConfirm();
+
+  const handleLogout = async () => {
+    if (await confirm({ title: 'Logout', message: 'Are you sure you want to logout?', danger: true })) {
+      localStorage.removeItem('kdk-demo-mode');
+      if (isDemoMode) {
+        setIsAuthenticated(false);
+        toast('Logged out successfully', 'success');
+        return;
+      }
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        toast(error.message, 'error');
+      } else {
+        setIsAuthenticated(false);
+        toast('Logged out successfully', 'success');
+      }
+    }
+  };
 
   const [tab, setTab] = useState<'profile' | 'team' | 'integrations' | 'notifications' | 'configurations'>('team');
   const [userModal, setUserModal] = useState<'create' | 'edit' | null>(null);
   const [userForm, setUserForm] = useState<User | null>(null);
+  const [userPassword, setUserPassword] = useState('');
 
   const [taskTypeModal, setTaskTypeModal] = useState<'create' | 'edit' | null>(null);
   const [taskTypeForm, setTaskTypeForm] = useState<TaskTypeConfig | null>(null);
 
   const [workflowModal, setWorkflowModal] = useState<'create' | 'edit' | null>(null);
   const [workflowForm, setWorkflowForm] = useState<Workflow | null>(null);
+  const [workflowStatusesInput, setWorkflowStatusesInput] = useState('');
+
+  const functionsBaseUrl = `${(import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '')}/.netlify/functions`;
 
   const openUserCreate = () => {
-    setUserForm({ id: genId(), name: '', email: '', role: 'Staff', designation: '', color: '#2563eb', active: true });
+    setUserForm({ id: genUUID(), name: '', email: '', role: 'Staff', designation: '', color: '#2563eb', active: true });
+    setUserPassword('');
     setUserModal('create');
   };
 
   const openUserEdit = (u: User) => {
     setUserForm({ ...u });
+    setUserPassword('');
     setUserModal('edit');
   };
 
-  const saveUser = () => {
+  const saveUser = async () => {
     if (!userForm?.name || !userForm?.email) {
       toast('Name and email are required', 'error');
       return;
     }
-    if (userModal === 'create') {
-      setUsers([...users, userForm]);
-      toast('User created', 'success');
-    } else {
-      setUsers(users.map(u => u.id === userForm.id ? userForm : u));
-      toast('User updated', 'success');
+    try {
+      if (userModal === 'create') {
+        if (isDemoMode) {
+          await addUser(userForm);
+          toast('Demo user created locally', 'success');
+        } else {
+          if (userPassword.length < 6) {
+            toast('Password must be at least 6 characters', 'error');
+            return;
+          }
+
+          const response = await fetch(`${functionsBaseUrl}/create-team-member`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: userForm.email,
+              password: userPassword,
+              name: userForm.name,
+              role: userForm.role,
+              designation: userForm.designation,
+              color: userForm.color,
+              active: userForm.active,
+            }),
+          });
+
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || 'Failed to create team member');
+          }
+
+          setUsers(prev => [payload.user, ...prev]);
+          toast('Team member created and registered', 'success');
+        }
+        } else {
+          if (isDemoMode) {
+            await updateUser(userForm.id, userForm);
+            toast('User updated', 'success');
+          } else {
+            const response = await fetch(`${functionsBaseUrl}/update-team-member`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(userForm),
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+              throw new Error(payload.error || 'Failed to update user');
+            }
+            setUsers(prev => prev.map(user => user.id === userForm.id ? payload.user : user));
+            toast('User updated', 'success');
+          }
+        }
+      setUserModal(null);
+    } catch (error) {
+      console.error('Error saving user:', error);
+      toast('Failed to save user', 'error');
     }
-    setUserModal(null);
   };
 
-  const deleteUser = async (id: string) => {
+  const delUser = async (id: string) => {
     if (await confirm({ title: 'Delete User', message: 'Are you sure you want to delete this user?', danger: true })) {
-      setUsers(users.filter(u => u.id !== id));
-      toast('User deleted', 'success');
+      try {
+        if (isDemoMode) {
+          await deleteUser(id);
+        } else {
+          const response = await fetch(`${functionsBaseUrl}/delete-team-member`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || 'Failed to delete user');
+          }
+          setUsers(prev => prev.filter(user => user.id !== id));
+        }
+        toast('User deleted', 'success');
+      } catch (error) {
+        console.error('Error deleting user:', error);
+        toast('Failed to delete user', 'error');
+      }
     }
   };
 
   const openTaskTypeCreate = () => {
-    setTaskTypeForm({ id: genId(), name: '', icon: 'check-square', color: '#3b82f6', description: '' });
+    setTaskTypeForm({ id: genUUID(), name: '', icon: 'check-square', color: '#3b82f6', description: '' });
     setTaskTypeModal('create');
   };
 
@@ -67,44 +158,56 @@ export function SettingsPage() {
     setTaskTypeModal('edit');
   };
 
-  const saveTaskType = () => {
+  const saveTaskType = async () => {
     if (!taskTypeForm?.name) {
       toast('Name is required', 'error');
       return;
     }
-    if (taskTypeModal === 'create') {
-      setTaskTypes([...taskTypes, taskTypeForm]);
-      toast('Task Type created', 'success');
-    } else {
-      setTaskTypes(taskTypes.map(t => t.id === taskTypeForm.id ? taskTypeForm : t));
-      toast('Task Type updated', 'success');
+    try {
+      if (taskTypeModal === 'create') {
+        await addTaskType(taskTypeForm);
+        toast('Task Type created', 'success');
+      } else {
+        await updateTaskType(taskTypeForm.id, taskTypeForm);
+        toast('Task Type updated', 'success');
+      }
+      setTaskTypeModal(null);
+    } catch (error) {
+      console.error('Error saving task type:', error);
+      toast('Failed to save task type', 'error');
     }
-    setTaskTypeModal(null);
   };
 
   const openWorkflowCreate = () => {
-    setWorkflowForm({ id: genId(), name: '', description: '', statuses: ['To Do', 'In Progress', 'Completed'], transitions: [] });
+    setWorkflowForm({ id: genUUID(), name: '', description: '', statuses: ['To Do', 'In Progress', 'Completed'], transitions: [] });
+    setWorkflowStatusesInput('To Do, In Progress, Completed');
     setWorkflowModal('create');
   };
 
   const openWorkflowEdit = (w: Workflow) => {
     setWorkflowForm({ ...w });
+    setWorkflowStatusesInput(w.statuses.join(', '));
     setWorkflowModal('edit');
   };
 
-  const saveWorkflow = () => {
+  const saveWorkflow = async () => {
     if (!workflowForm?.name) {
       toast('Name is required', 'error');
       return;
     }
-    if (workflowModal === 'create') {
-      setWorkflows([...workflows, workflowForm]);
-      toast('Workflow created', 'success');
-    } else {
-      setWorkflows(workflows.map(w => w.id === workflowForm.id ? workflowForm : w));
-      toast('Workflow updated', 'success');
+    try {
+      if (workflowModal === 'create') {
+        await addWorkflow(workflowForm);
+        toast('Workflow created', 'success');
+      } else {
+        await updateWorkflow(workflowForm.id, workflowForm);
+        toast('Workflow updated', 'success');
+      }
+      setWorkflowModal(null);
+    } catch (error) {
+      console.error('Error saving workflow:', error);
+      toast('Failed to save workflow', 'error');
     }
-    setWorkflowModal(null);
   };
 
   const USER_COLORS = ['#2563eb', '#dc2626', '#059669', '#d97706', '#7c3aed', '#ec4899', '#14b8a6'];
@@ -117,45 +220,54 @@ export function SettingsPage() {
         description="Manage your workspace, team, and integrations"
       />
 
-      <div className="bg-white border border-gray-200 rounded-xl flex-1 flex overflow-hidden min-h-[500px]">
+      <div className="bg-white border border-gray-200 rounded-xl flex-1 flex flex-col md:flex-row overflow-hidden min-h-[500px]">
         {/* Sidebar */}
-        <div className="w-[220px] shrink-0 border-r border-gray-200 flex flex-col bg-gray-50/50 p-3">
-          <div className="space-y-1">
+        <div className="w-full md:w-[220px] shrink-0 border-b md:border-b-0 md:border-r border-gray-200 flex flex-col bg-gray-50/50 p-3 overflow-x-auto">
+          <div className="flex md:flex-col gap-1 min-w-max md:min-w-0">
             <button 
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${tab === 'profile' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${tab === 'profile' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
               onClick={() => setTab('profile')}
             >
-              <Settings size={16} /> Profile & Workspace
+              <Settings size={16} /> <span className="whitespace-nowrap">Profile & Workspace</span>
             </button>
             <button 
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${tab === 'team' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${tab === 'team' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
               onClick={() => setTab('team')}
             >
-              <Users size={16} /> Team & Access
+              <Users size={16} /> <span className="whitespace-nowrap">Team & Access</span>
             </button>
             <button 
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${tab === 'integrations' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${tab === 'integrations' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
               onClick={() => setTab('integrations')}
             >
-              <LinkIcon size={16} /> Integrations
+              <LinkIcon size={16} /> <span className="whitespace-nowrap">Integrations</span>
             </button>
             <button 
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${tab === 'notifications' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${tab === 'notifications' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
               onClick={() => setTab('notifications')}
             >
-              <Bell size={16} /> Notifications
+              <Bell size={16} /> <span className="whitespace-nowrap">Notifications</span>
             </button>
             <button 
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${tab === 'configurations' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${tab === 'configurations' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
               onClick={() => setTab('configurations')}
             >
-              <Sliders size={16} /> Configurations
+              <Sliders size={16} /> <span className="whitespace-nowrap">Configurations</span>
             </button>
+            
+            <div className="mt-auto pt-4 border-t border-gray-200">
+              <button 
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium text-red-600 hover:bg-red-50 transition-colors"
+                onClick={handleLogout}
+              >
+                <LogOut size={16} /> <span className="whitespace-nowrap">Logout</span>
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-white">
+        <div className="flex-1 overflow-y-auto p-6 scrollbar-hide bg-white">
           {tab === 'profile' && (
             <div className="max-w-2xl">
               <h2 className="text-[16px] font-semibold text-gray-900 mb-4">Workspace Settings</h2>
@@ -228,7 +340,7 @@ export function SettingsPage() {
                             <button className="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-900 transition-colors" onClick={() => openUserEdit(u)}>
                               <Edit2 size={14} />
                             </button>
-                            <button className="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => deleteUser(u.id)}>
+                            <button className="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => delUser(u.id)}>
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -392,6 +504,18 @@ export function SettingsPage() {
               <label className="block text-[11.5px] font-semibold text-gray-500 mb-1.5">Email Address *</label>
               <input className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13.5px] outline-none focus:border-blue-600" type="email" value={userForm.email} onChange={e => setUserForm({ ...userForm, email: e.target.value })} />
             </div>
+            {userModal === 'create' && (
+              <div>
+                <label className="block text-[11.5px] font-semibold text-gray-500 mb-1.5">Temporary Password *</label>
+                <input
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13.5px] outline-none focus:border-blue-600"
+                  type="password"
+                  value={userPassword}
+                  onChange={e => setUserPassword(e.target.value)}
+                  placeholder="At least 6 characters"
+                />
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[11.5px] font-semibold text-gray-500 mb-1.5">Role</label>
@@ -476,6 +600,19 @@ export function SettingsPage() {
                 ))}
               </div>
             </div>
+            <div>
+              <label className="block text-[11.5px] font-semibold text-gray-500 mb-1.5">Workflow</label>
+              <select 
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13.5px] outline-none focus:border-blue-600 bg-white"
+                value={taskTypeForm.workflowId || ''}
+                onChange={e => setTaskTypeForm({ ...taskTypeForm, workflowId: e.target.value })}
+              >
+                <option value="">Default (No Workflow)</option>
+                {workflows.map(wf => (
+                  <option key={wf.id} value={wf.id}>{wf.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </Modal>
       )}
@@ -505,11 +642,82 @@ export function SettingsPage() {
               <label className="block text-[11.5px] font-semibold text-gray-500 mb-1.5">Statuses (comma separated)</label>
               <input 
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13.5px] outline-none focus:border-blue-600" 
-                value={workflowForm.statuses.join(', ')} 
-                onChange={e => setWorkflowForm({ ...workflowForm, statuses: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} 
+                value={workflowStatusesInput} 
+                onChange={e => {
+                  const val = e.target.value;
+                  setWorkflowStatusesInput(val);
+                  
+                  const newStatuses = val.split(',').map(s => s.trim()).filter(Boolean);
+                  // Keep existing transitions that are still valid
+                  const newTransitions = workflowForm.transitions
+                    .filter(t => newStatuses.includes(t.from))
+                    .map(t => ({
+                      ...t,
+                      to: t.to.filter(s => newStatuses.includes(s))
+                    }));
+                  
+                  // Add missing transitions
+                  newStatuses.forEach(s => {
+                    if (!newTransitions.find(t => t.from === s)) {
+                      newTransitions.push({ from: s, to: [] });
+                    }
+                  });
+
+                  setWorkflowForm({ 
+                    ...workflowForm, 
+                    statuses: newStatuses,
+                    transitions: newTransitions
+                  });
+                }} 
                 placeholder="e.g. To Do, In Progress, Done"
               />
             </div>
+            {workflowForm.statuses.length > 0 && (
+              <div>
+                <label className="block text-[11.5px] font-semibold text-gray-500 mb-2">Allowed Transitions</label>
+                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+                  {workflowForm.statuses.map(status => {
+                    const transition = workflowForm.transitions.find(t => t.from === status) || { from: status, to: [] };
+                    return (
+                      <div key={status} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                        <div className="text-[13px] font-semibold text-gray-900 mb-2">{status} <span className="text-gray-500 font-normal">can transition to:</span></div>
+                        <div className="flex flex-wrap gap-2">
+                          {workflowForm.statuses.filter(s => s !== status).map(targetStatus => (
+                            <label key={targetStatus} className="flex items-center gap-1.5 bg-white border border-gray-200 px-2 py-1 rounded-md cursor-pointer hover:bg-gray-50">
+                              <input 
+                                type="checkbox" 
+                                className="w-3.5 h-3.5 text-blue-600 rounded border-gray-300"
+                                checked={transition.to.includes(targetStatus)}
+                                onChange={e => {
+                                  const isChecked = e.target.checked;
+                                  setWorkflowForm(prev => {
+                                    if (!prev) return prev;
+                                    const newTransitions = prev.transitions.map(t => {
+                                      if (t.from === status) {
+                                        return {
+                                          ...t,
+                                          to: isChecked ? [...t.to, targetStatus] : t.to.filter(s => s !== targetStatus)
+                                        };
+                                      }
+                                      return t;
+                                    });
+                                    return { ...prev, transitions: newTransitions };
+                                  });
+                                }}
+                              />
+                              <span className="text-[12px] text-gray-700">{targetStatus}</span>
+                            </label>
+                          ))}
+                          {workflowForm.statuses.length <= 1 && (
+                            <span className="text-[12px] text-gray-500 italic">Add more statuses to define transitions</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </Modal>
       )}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { daysLeft, pct } from '../utils';
+import { useToast } from '../context/ToastContext';
+import { daysLeft, pct, canTransition } from '../utils';
 import { AlertCircle, Zap, Clock, CheckCircle, Calendar as CalendarIcon, Users, ShieldAlert, GitMerge, Plus, ExternalLink, ArrowRight, FileText, UserPlus, Video, LayoutDashboard, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TypeChip, StatusBadge } from '../components/ui/Badges';
@@ -11,7 +12,8 @@ import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/ui/PageHeader';
 
 export function DashboardPage() {
-  const { tasks, setTasks, clients, users, deadlines, meetings } = useApp();
+  const { tasks, clients, users, deadlines, meetings, taskTypes, workflows, currentUser, updateTask } = useApp();
+  const toast = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [activeView, setActiveView] = useState<string | null>(null);
@@ -27,16 +29,36 @@ export function DashboardPage() {
     setIsModalOpen(true);
   };
   
-  const markComplete = (id: string, e: React.MouseEvent) => {
+  const markComplete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setTasks(tasks.map(t => t.id === id ? { ...t, status: 'Completed' } : t));
+    const task = tasks.find(t => t.id === id);
+    if (task) {
+      const check = canTransition(task, 'Completed', taskTypes, workflows);
+      if (!check.allowed) {
+        toast(check.reason || 'Invalid transition to Completed', 'error');
+        return;
+      }
+    }
+    try {
+      await updateTask(id, { status: 'Completed' });
+      toast('Task marked as completed', 'success');
+    } catch (error) {
+      console.error('Error marking task complete:', error);
+      toast('Failed to update task', 'error');
+    }
   };
-  const overdue = tasks.filter(t => t.status !== 'Completed' && (daysLeft(t.dueDate) ?? 0) < 0);
-  const awaitingInfo = tasks.filter(t => t.status === 'Awaiting Info');
-  const dueSoon = tasks.filter(t => t.status !== 'Completed' && (daysLeft(t.dueDate) ?? -1) >= 0 && (daysLeft(t.dueDate) ?? 8) <= 7);
-  const underReview = tasks.filter(t => t.status === 'Under Review');
+
+  const filteredTasks = tasks.filter(t => {
+    if (currentUser?.role === 'admin') return true;
+    return t.assigneeId === currentUser?.id || t.reviewerId === currentUser?.id;
+  });
+
+  const overdue = filteredTasks.filter(t => t.status !== 'Completed' && (daysLeft(t.dueDate) ?? 0) < 0);
+  const awaitingInfo = filteredTasks.filter(t => t.status === 'Awaiting Info');
+  const dueSoon = filteredTasks.filter(t => t.status !== 'Completed' && (daysLeft(t.dueDate) ?? -1) >= 0 && (daysLeft(t.dueDate) ?? 8) <= 7);
+  const underReview = filteredTasks.filter(t => t.status === 'Under Review');
   const urgent = deadlines.filter(d => (daysLeft(d.dueDate) ?? 8) <= 7 && (daysLeft(d.dueDate) ?? -1) >= 0);
-  const upcomingMeetings = meetings.filter(m => (daysLeft(m.date) ?? -1) >= 0 && m.status !== 'completed').slice(0, 3);
+  const upcomingMeetings = meetings.filter(m => m.attendees.includes(currentUser?.id || '') && (daysLeft(m.date) ?? -1) >= 0 && m.status !== 'completed').slice(0, 3);
 
   const stats = [
     { id: 'overdue', label: 'Overdue Tasks', num: overdue.length, sub: overdue.length > 0 ? `${Math.abs(Math.min(...overdue.map(t => daysLeft(t.dueDate) || 0)))} days max` : 'No overdue tasks', color: '#dc2626', icon: AlertCircle, filter: 'overdue' },
@@ -47,13 +69,13 @@ export function DashboardPage() {
 
   const handleStatClick = (s: typeof stats[0]) => {
     if (s.id === 'overdue') {
-      navigate('/tasks?tab=overdue');
+      navigate(`/tasks?tab=overdue`);
     } else if (s.id === 'due-soon') {
-      navigate('/tasks?tab=due-soon');
+      navigate(`/tasks?tab=due-soon`);
     } else if (s.id === 'awaiting-info') {
-      navigate('/tasks?status=Awaiting Info');
+      navigate(`/tasks?status=Awaiting Info`);
     } else if (s.id === 'under-review') {
-      navigate('/tasks?status=Under Review');
+      navigate(`/tasks?status=Under Review`);
     }
   };
 
@@ -66,34 +88,35 @@ export function DashboardPage() {
 
   const getFilteredTasks = () => {
     if (activeView === 'overdue') return overdue;
-    if (activeView === 'in-progress') return tasks.filter(t => t.status === 'In Progress');
-    if (activeView === 'due-soon') return tasks.filter(t => t.status !== 'Completed' && (daysLeft(t.dueDate) ?? -1) >= 0 && (daysLeft(t.dueDate) ?? 8) <= 7);
-    if (activeView === 'completed') return tasks.filter(t => t.status === 'Completed');
+    if (activeView === 'in-progress') return filteredTasks.filter(t => t.status === 'In Progress');
+    if (activeView === 'due-soon') return filteredTasks.filter(t => t.status !== 'Completed' && (daysLeft(t.dueDate) ?? -1) >= 0 && (daysLeft(t.dueDate) ?? 8) <= 7);
+    if (activeView === 'completed') return filteredTasks.filter(t => t.status === 'Completed');
     return [];
   };
 
   return (
     <div className="flex-1 pb-10">
       <PageHeader 
-        title={`Welcome back, ${users[0].name.split(' ')[0]}`}
+        title={`Welcome back, ${currentUser?.name.split(' ')[0] || 'User'}`}
         description={`Here's what's happening with your practice today, ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}.`}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             {quickActions.map((action) => (
               <button 
                 key={action.label}
-                className={`${action.color} hover:opacity-90 text-white p-2.5 rounded-xl transition-all shadow-lg shadow-blue-200 flex items-center gap-2 px-4 text-[13px] font-bold`}
+                className={`${action.color} hover:opacity-90 text-white p-2 sm:p-2.5 rounded-xl transition-all shadow-lg shadow-blue-200 flex items-center gap-2 px-3 sm:px-4 text-[12px] sm:text-[13px] font-bold shrink-0`}
                 onClick={action.onClick}
               >
                 <action.icon size={16} />
-                <span className="hidden sm:inline">{action.label}</span>
+                <span className="hidden md:inline">{action.label}</span>
+                <span className="md:hidden">{action.label.split(' ')[0]}</span>
               </button>
             ))}
           </div>
         }
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {stats.map((s, i) => (
           <motion.div 
             key={s.label} 
@@ -190,15 +213,15 @@ export function DashboardPage() {
               const dl = daysLeft(m.date) || 0;
               return (
                 <div key={m.id} className="bg-white border border-gray-200 rounded-xl p-3.5 mb-2 hover:shadow-md transition-shadow border-l-[3px]" style={{ borderLeftColor: dl === 0 ? '#dc2626' : dl <= 2 ? '#d97706' : '#2563eb' }}>
-                  <div className="flex justify-between mb-1">
-                    <span className="font-semibold text-[13px]">{m.title}</span>
-                    <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold">
+                  <div className="flex justify-between items-start gap-2 mb-1">
+                    <span className="font-semibold text-[13px] leading-tight">{m.title}</span>
+                    <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold shrink-0">
                       {dl === 0 ? 'Today' : dl === 1 ? 'Tomorrow' : new Date(m.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between mt-2">
-                    <div className="flex gap-3 text-[11px] text-gray-500">
-                      <span>{c?.name || '—'}</span>
+                  <div className="flex items-start sm:items-center justify-between mt-2 gap-2">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500">
+                      <span className="truncate max-w-[140px]">{c?.name || '—'}</span>
                       <span>{m.time}</span>
                       <span>{m.duration}min</span>
                       <span className="capitalize">{m.platform || m.type}</span>
@@ -208,7 +231,7 @@ export function DashboardPage() {
                         href={m.meetLink} 
                         target="_blank" 
                         rel="noreferrer"
-                        className="text-[11px] font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                        className="text-[11px] font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded inline-flex items-center justify-center gap-1 transition-colors shrink-0 mt-0.5 sm:mt-0"
                       >
                         Join <ExternalLink size={10} />
                       </a>

@@ -3,12 +3,12 @@ import { Modal } from './Modal';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import { Task, Subtask, Comment, Attachment } from '../../types';
-import { genId, fmt, today, STATUS_COLORS, PRIORITY_COLORS, TYPE_COLORS } from '../../utils';
+import { genUUID, fmt, today, STATUS_COLORS, PRIORITY_COLORS, TYPE_COLORS } from '../../utils';
 import { TagInput } from './TagInput';
 import { SearchableSelect } from './SearchableSelect';
 import { IconRenderer } from './IconRenderer';
 import { RichTextEditor } from './RichTextEditor';
-import { Plus, X, Trash2, Paperclip, MessageSquare, Clock, User, GitMerge, ListTodo, Calendar, Reply, Tag as TagIcon, Smile } from 'lucide-react';
+import { Plus, X, Trash2, Eye, Paperclip, MessageSquare, Clock, User, GitMerge, ListTodo, Calendar, Reply, Tag as TagIcon, Smile } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { MentionTextarea } from './MentionTextarea';
 
@@ -19,7 +19,7 @@ interface TaskModalProps {
 }
 
 export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
-  const { tasks, setTasks, clients, users, templates, taskTypes, notify } = useApp();
+  const { tasks, clients, users, templates, taskTypes, workflows, notify, currentUser, addTask, updateTask, deleteTask } = useApp();
   const toast = useToast();
 
   const [form, setForm] = useState<Task>(task || {
@@ -30,8 +30,8 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
     issueType: 'Task',
     status: 'To Do',
     priority: 'Medium',
-    assigneeId: 'u1',
-    reporterId: 'u1',
+    assigneeId: currentUser?.id || 'u1',
+    reporterId: currentUser?.id || 'u1',
     reviewerId: '',
     dueDate: fmt(today),
     createdAt: fmt(today),
@@ -79,86 +79,94 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
   const childTasks = tasks.filter(t => t.parentId === form.id);
   const linkedTasksList = tasks.filter(t => form.linkedTasks?.includes(t.id));
 
-  const save = () => {
+  const save = async () => {
     if (!form.title || !form.clientId || !form.dueDate) {
       toast('Title, Client, and Due Date are required', 'error');
       return;
     }
     
-    if (isNew) {
-      let max = 0;
-      tasks.forEach(t => {
-        if (t.id.startsWith('KDK-')) {
-          const num = parseInt(t.id.split('-')[1], 10);
-          if (!isNaN(num) && num > max) max = num;
-        }
-      });
-      pendingSubtasks.forEach(pst => {
-        if (pst.id && pst.id.startsWith('KDK-')) {
-          const num = parseInt(pst.id.split('-')[1], 10);
-          if (!isNaN(num) && num > max) max = num;
-        }
-      });
-      const newId = `KDK-${max + 1}`;
-      const newTask = { ...form, id: newId };
-      const newTasks = [newTask];
-      
-      pendingSubtasks.forEach((pst) => {
-        newTasks.push({
-          id: pst.id!,
-          title: pst.title || 'Untitled Subtask',
-          clientId: form.clientId,
-          type: form.type,
-          issueType: 'Subtask',
-          status: pst.status || 'To Do',
-          priority: pst.priority || form.priority,
-          assigneeId: pst.assigneeId || form.assigneeId,
-          reporterId: 'u1',
-          reviewerId: '',
-          dueDate: pst.dueDate || form.dueDate,
-          createdAt: fmt(today),
-          recurring: 'One-time',
-          description: pst.description || '',
-          tags: [],
-          parentId: newId,
-          subtasks: [],
-          linkedTasks: [],
-          comments: [],
-          attachments: [],
-          activity: [{ text: 'Subtask created', at: fmt(today) }]
+    try {
+      if (isNew) {
+        let max = 0;
+        tasks.forEach(t => {
+          if (t.id.startsWith('KDK-')) {
+            const num = parseInt(t.id.split('-')[1], 10);
+            if (!isNaN(num) && num > max) max = num;
+          }
         });
-      });
-      
-      setTasks([...newTasks, ...tasks]);
-      toast('Task created', 'success');
-    } else {
-      const changes: string[] = [];
-      if (task) {
-        if (task.status !== form.status) changes.push(`Status changed to ${form.status}`);
-        if (task.assigneeId !== form.assigneeId) {
-           const assignee = users.find(u => u.id === form.assigneeId)?.name || 'Unassigned';
-           changes.push(`Assigned to ${assignee}`);
+        pendingSubtasks.forEach(pst => {
+          if (pst.id && pst.id.startsWith('KDK-')) {
+            const num = parseInt(pst.id.split('-')[1], 10);
+            if (!isNaN(num) && num > max) max = num;
+          }
+        });
+        const newId = `KDK-${max + 1}`;
+        const newTask = { ...form, id: newId };
+        
+        await addTask(newTask);
+        
+        if (pendingSubtasks.length > 0) {
+          await Promise.all(pendingSubtasks.map(async (pst, idx) => {
+            const subtask: Task = {
+              id: pst.id || `KDK-${max + 2 + idx}`,
+              title: pst.title || 'Untitled Subtask',
+              clientId: form.clientId,
+              type: form.type,
+              issueType: 'Subtask',
+              status: pst.status || 'To Do',
+              priority: pst.priority || form.priority,
+              assigneeId: pst.assigneeId || form.assigneeId,
+              reporterId: currentUser?.id || 'u1',
+              reviewerId: '',
+              dueDate: pst.dueDate || form.dueDate,
+              createdAt: fmt(today),
+              recurring: 'One-time',
+              description: pst.description || '',
+              tags: [],
+              parentId: newId,
+              subtasks: [],
+              linkedTasks: [],
+              comments: [],
+              attachments: [],
+              activity: [{ text: 'Subtask created', at: fmt(today) }]
+            };
+            return addTask(subtask);
+          }));
         }
-        if (task.dueDate !== form.dueDate) changes.push(`Due date changed to ${form.dueDate}`);
-        if (task.priority !== form.priority) changes.push(`Priority changed to ${form.priority}`);
-        if (task.description !== form.description) changes.push(`Description updated`);
+        
+        toast('Task created', 'success');
+      } else {
+        const changes: string[] = [];
+        if (task) {
+          if (task.status !== form.status) changes.push(`Status changed to ${form.status}`);
+          if (task.assigneeId !== form.assigneeId) {
+             const assignee = users.find(u => u.id === form.assigneeId)?.name || 'Unassigned';
+             changes.push(`Assigned to ${assignee}`);
+          }
+          if (task.dueDate !== form.dueDate) changes.push(`Due date changed to ${form.dueDate}`);
+          if (task.priority !== form.priority) changes.push(`Priority changed to ${form.priority}`);
+          if (task.description !== form.description) changes.push(`Description updated`);
+        }
+        
+        let updatedForm = { ...form };
+        if (changes.length > 0) {
+          updatedForm.activity = [
+            ...changes.map(c => ({ text: c, at: fmt(today) })),
+            ...(form.activity || [])
+          ];
+        }
+        
+        await updateTask(form.id, updatedForm);
+        toast('Task updated', 'success');
       }
-      
-      let updatedForm = { ...form };
-      if (changes.length > 0) {
-        updatedForm.activity = [
-          ...changes.map(c => ({ text: c, at: fmt(today) })),
-          ...(form.activity || [])
-        ];
-      }
-      
-      setTasks(tasks.map(t => t.id === form.id ? updatedForm : t));
-      toast('Task updated', 'success');
+      onClose();
+    } catch (error) {
+      console.error('Error saving task:', error);
+      toast('Failed to save task', 'error');
     }
-    onClose();
   };
 
-  const applyTemplate = (tid: string) => {
+  const applyTemplate = async (tid: string) => {
     setSelectedTemplate(tid);
     const tmpl = templates.find(t => t.id === tid);
     if (tmpl) {
@@ -212,7 +220,7 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
               status: 'To Do',
               priority: form.priority,
               assigneeId: form.assigneeId,
-              reporterId: 'u1',
+              reporterId: currentUser?.id || 'u1',
               reviewerId: '',
               dueDate: form.dueDate,
               createdAt: fmt(today),
@@ -227,7 +235,7 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
               activity: [{ text: 'Subtask created from template', at: fmt(today) }]
             };
           });
-          setTasks([...newSubtasks, ...tasks]);
+          await Promise.all(newSubtasks.map(s => addTask(s)));
           toast(`${newSubtasks.length} subtasks created immediately`, 'success');
         }
       }
@@ -237,8 +245,8 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
   const addComment = () => {
     if (!newComment.trim()) return;
     const comment: Comment = { 
-      id: genId(), 
-      userId: 'u1', 
+      id: genUUID(), 
+      userId: currentUser?.id || 'u1', 
       text: newComment, 
       createdAt: new Date().toISOString(),
       reactions: [] 
@@ -257,7 +265,7 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
           if (existing) {
             return { ...c, reactions: reactions.map(r => r.emoji === emoji ? { ...r, count: r.count + 1 } : r) };
           }
-          return { ...c, reactions: [...reactions, { emoji, count: 1, users: ['u1'] }] };
+          return { ...c, reactions: [...reactions, { emoji, count: 1, users: [currentUser?.id || 'u1'] }] };
         }
         return c;
       })
@@ -281,12 +289,12 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
-      const attachment: Attachment = { id: genId(), name: file.name, size: `${(file.size / 1024).toFixed(1)} KB`, type: file.type };
+      const attachment: Attachment = { id: genUUID(), name: file.name, size: `${(file.size / 1024).toFixed(1)} KB`, type: file.type };
       setForm(f => ({ ...f, attachments: [...(f.attachments || []), attachment], activity: [{ text: `Attached ${file.name}`, at: fmt(today) }, ...(f.activity || [])] }));
     }
   };
 
-  const createQuickSubtask = () => {
+  const createQuickSubtask = async () => {
     if (!newSubtaskTitle.trim()) return;
 
     let max = 0;
@@ -328,7 +336,7 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
       status: 'To Do',
       priority: form.priority,
       assigneeId: form.assigneeId,
-      reporterId: 'u1',
+      reporterId: currentUser?.id || 'u1',
       reviewerId: '',
       dueDate: form.dueDate,
       createdAt: fmt(today),
@@ -342,18 +350,28 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
       attachments: [],
       activity: [{ text: 'Subtask created', at: fmt(today) }]
     };
-    setTasks([newTask, ...tasks]);
-    setNewSubtaskTitle('');
-    toast('Subtask created', 'success');
+    
+    try {
+      await addTask(newTask);
+      setNewSubtaskTitle('');
+      toast('Subtask created', 'success');
+    } catch (error) {
+      console.error('Error creating subtask:', error);
+      toast('Failed to create subtask', 'error');
+    }
   };
 
-  const linkExistingAsSubtask = (id: string) => {
+  const linkExistingAsSubtask = async (id: string) => {
     if (!id) return;
     if (isNew) {
       toast('Please save the task first before linking existing subtasks', 'warning');
       return;
     }
-    setTasks(tasks.map(t => t.id === id ? { ...t, parentId: form.id, issueType: 'Subtask' } : t));
+    try {
+      await updateTask(id, { parentId: form.id, issueType: 'Subtask' });
+    } catch (error) {
+      console.error('Error linking task:', error);
+    }
     toast('Task linked as subtask', 'success');
   };
 
@@ -371,7 +389,29 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
   const clientOptions = clients.map(c => ({ value: c.id, label: c.name }));
   const userOptions = users.map(u => ({ value: u.id, label: u.name }));
   const typeOptions = Object.keys(TYPE_COLORS).map(t => ({ value: t, label: t }));
-  const statusOptions = Object.keys(STATUS_COLORS).map(s => ({ value: s, label: s }));
+  
+  const currentTaskType = taskTypes.find(t => t.name === (form.issueType || 'Task'));
+  const currentWorkflow = currentTaskType?.workflowId ? workflows.find(w => w.id === currentTaskType.workflowId) : null;
+  
+  const allStatuses = currentWorkflow ? currentWorkflow.statuses : Array.from(new Set(workflows.flatMap(w => w.statuses)));
+  if (form.status && !allStatuses.includes(form.status)) {
+    allStatuses.push(form.status);
+  }
+  
+  const statusOptions = allStatuses.map(s => {
+    if (isNew || s === form.status) return { value: s, label: s };
+    
+    // Check if transition is allowed
+    const transition = currentWorkflow?.transitions.find(t => t.from === form.status);
+    const isAllowed = !currentWorkflow || (transition && transition.to.includes(s));
+    
+    return { 
+      value: s, 
+      label: s,
+      disabled: !isAllowed
+    };
+  }).filter(o => !o.disabled); // Only show allowed statuses
+
   const priorityOptions = Object.keys(PRIORITY_COLORS).map(p => ({ value: p, label: p }));
   const parentOptions = [{ value: '', label: 'None' }, ...tasks.filter(t => t.id !== form.id && !t.parentId).map(t => ({ value: t.id, label: `#${t.id} - ${t.title}` }))];
   const linkedTaskOptions = tasks.filter(t => t.id !== form.id).map(t => ({ value: t.id, label: `#${t.id} - ${t.title}` }));
@@ -389,7 +429,22 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
     searchLabel: t.name
   }));
 
-  const currentTaskType = taskTypes.find(t => t.name === (form.issueType || 'Task'));
+  const handleOpenAttachment = (a: any) => {
+    toast(`Opening ${a.name}...`, 'success');
+    
+    // For sample files, we can use the actual files
+    if (a.name === 'sample.pdf' || a.name === 'sample.xlsx') {
+      window.open(`/${a.name}`, '_blank');
+    } else {
+      // Simulate opening for others
+      const link = document.createElement('a');
+      link.href = '#';
+      link.setAttribute('download', a.name);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
 
   const TABS = [
     { id: 'details', label: 'Details', icon: ListTodo },
@@ -422,7 +477,7 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
         </div>
       }
     >
-      <div className="flex flex-col md:flex-row gap-8 max-h-[75vh] overflow-y-auto custom-scrollbar pr-2">
+      <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 max-h-[80vh] overflow-y-auto custom-scrollbar pr-2">
         {/* Left Column: Main Content */}
         <div className="flex-1 space-y-6 min-w-0">
           <div>
@@ -435,12 +490,12 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
             />
           </div>
 
-          <div className="flex border-b border-gray-200 gap-6">
+          <div className="flex border-b border-gray-200 gap-4 sm:gap-6 overflow-x-auto no-scrollbar">
             {TABS.map(t => (
               <button
                 key={t.id}
                 onClick={() => setActiveTab(t.id as any)}
-                className={`py-2.5 text-[13px] font-semibold flex items-center gap-2 border-b-2 transition-all relative ${activeTab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+                className={`py-2.5 text-[13px] font-semibold flex items-center gap-2 border-b-2 transition-all relative shrink-0 ${activeTab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
               >
                 <t.icon size={15} />
                 {t.label}
@@ -566,22 +621,46 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
                               type="checkbox" 
                               className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" 
                               checked={s.status === 'Completed'} 
-                              onChange={e => setTasks(tasks.map(t => t.id === s.id ? { ...t, status: e.target.checked ? 'Completed' : 'To Do' } : t))} 
+                              onChange={async (e) => {
+                                try {
+                                  await updateTask(s.id, { status: e.target.checked ? 'Completed' : 'To Do' });
+                                } catch (err) {
+                                  console.error(err);
+                                }
+                              }} 
                             />
                             <div className="flex-1 min-w-0 flex items-center gap-2">
                               <span className="text-[10px] font-mono text-gray-400">#{s.id}</span>
                               <input 
                                 className={`w-full bg-transparent border-none p-0 text-[13px] outline-none focus:ring-0 ${s.status === 'Completed' ? 'line-through text-gray-400' : 'text-gray-900 font-medium'}`} 
                                 value={s.title} 
-                                onChange={e => setTasks(tasks.map(t => t.id === s.id ? { ...t, title: e.target.value } : t))} 
+                                onChange={async (e) => {
+                                  try {
+                                    await updateTask(s.id, { title: e.target.value });
+                                  } catch (err) {
+                                    console.error(err);
+                                  }
+                                }} 
                                 placeholder="Subtask title" 
                               />
                             </div>
                             <div className="flex items-center gap-2">
                               <div className="w-[120px]">
-                                <SearchableSelect options={userOptions} value={s.assigneeId || ''} onChange={v => setTasks(tasks.map(t => t.id === s.id ? { ...t, assigneeId: v } : t))} placeholder="Assignee" />
+                                <SearchableSelect options={userOptions} value={s.assigneeId || ''} onChange={async (v) => {
+                                  try {
+                                    await updateTask(s.id, { assigneeId: v });
+                                  } catch (err) {
+                                    console.error(err);
+                                  }
+                                }} placeholder="Assignee" />
                               </div>
-                              <button className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100" onClick={() => { if(confirm('Delete subtask?')) setTasks(tasks.filter(t => t.id !== s.id)) }}>
+                              <button className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100" onClick={async () => { 
+                                try {
+                                  await deleteTask(s.id);
+                                } catch (err) {
+                                  console.error(err);
+                                }
+                              }}>
                                 <Trash2 size={14} />
                               </button>
                             </div>
@@ -630,12 +709,20 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
                         <div className="text-[13px] font-bold text-gray-900 truncate">{a.name}</div>
                         <div className="text-[11px] text-gray-500">{a.size} • {a.type.split('/')[1]?.toUpperCase() || 'FILE'}</div>
                       </div>
-                      <button 
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
-                        onClick={() => setForm({ ...form, attachments: form.attachments?.filter(x => x.id !== a.id) })}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                          onClick={() => handleOpenAttachment(a)}
+                        >
+                          <Eye size={14} />
+                        </button>
+                        <button 
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                          onClick={() => setForm({ ...form, attachments: form.attachments?.filter(x => x.id !== a.id) })}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -645,7 +732,7 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
             {activeTab === 'comments' && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
                 <div className="flex items-start gap-4">
-                  <Avatar user={users[0]} size={36} />
+                  <Avatar user={currentUser || users[0]} size={36} />
                   <div className="flex-1 border border-gray-200 rounded-xl overflow-hidden focus-within:border-blue-600 focus-within:ring-4 focus-within:ring-blue-50 transition-all bg-white shadow-sm">
                     <MentionTextarea 
                       className="w-full px-4 py-3 border-none text-[14px] outline-none min-h-[100px] resize-y bg-transparent" 
@@ -747,7 +834,7 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
         </div>
 
         {/* Right Column: Sidebar */}
-        <div className="w-full md:w-80 shrink-0 space-y-6">
+        <div className="w-full lg:w-80 shrink-0 space-y-6">
           <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-5 shadow-sm">
             {templates.length > 0 && (
               <div>
@@ -778,7 +865,19 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-widest">Issue Type</label>
-                <SearchableSelect options={issueTypeOptions} value={form.issueType || 'Task'} onChange={v => setForm({ ...form, issueType: v })} />
+                <SearchableSelect 
+                  options={issueTypeOptions} 
+                  value={form.issueType || 'Task'} 
+                  onChange={v => {
+                    const newType = taskTypes.find(t => t.name === v);
+                    const newWf = newType?.workflowId ? workflows.find(w => w.id === newType.workflowId) : null;
+                    let newStatus = form.status;
+                    if (newWf && !newWf.statuses.includes(newStatus)) {
+                      newStatus = newWf.statuses[0] || 'To Do';
+                    }
+                    setForm({ ...form, issueType: v, status: newStatus });
+                  }} 
+                />
               </div>
             </div>
 

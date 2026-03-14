@@ -9,10 +9,10 @@ const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.get
 const subDays = (d: Date, n: number) => addDays(d, -n);
 
 export const INIT_TASK_TYPES: TaskTypeConfig[] = [
-  { id: 'tt1', name: 'Task', icon: 'check-square', color: '#3b82f6' },
-  { id: 'tt2', name: 'Subtask', icon: 'git-merge', color: '#6b7280' },
-  { id: 'tt3', name: 'Bug', icon: 'bug', color: '#ef4444' },
-  { id: 'tt4', name: 'Epic', icon: 'zap', color: '#8b5cf6' }
+  { id: 'tt1', name: 'Task', icon: 'check-square', color: '#3b82f6', workflowId: 'wf1' },
+  { id: 'tt2', name: 'Subtask', icon: 'git-merge', color: '#6b7280', workflowId: 'wf1' },
+  { id: 'tt3', name: 'Bug', icon: 'bug', color: '#ef4444', workflowId: 'wf1' },
+  { id: 'tt4', name: 'Epic', icon: 'zap', color: '#8b5cf6', workflowId: 'wf1' }
 ];
 
 export const INIT_WORKFLOWS: Workflow[] = [
@@ -121,6 +121,8 @@ export const INIT_DOCS: Document[] = [
   { id: 'd4', folderId: 'f4', name: 'Form26Q_Q2_Mehta.pdf', type: 'pdf', size: '210 KB', clientId: 'c2', tags: ['TDS', '26Q', 'Q2', '2024'], uploadedBy: 'u3', uploadedAt: fmt(subDays(today, 10)), description: 'TDS return Q2 filed copy' },
   { id: 'd5', folderId: 'f5', name: 'MGT7_Patel_Constructions.pdf', type: 'pdf', size: '520 KB', clientId: 'c4', tags: ['ROC', 'MGT-7', 'Annual'], uploadedBy: 'u2', uploadedAt: fmt(subDays(today, 7)), description: 'MGT-7 filed copy with SRN' },
   { id: 'd6', folderId: 'f1', name: 'Engagement_Letter_Template.docx', type: 'docx', size: '85 KB', clientId: null, tags: ['Template', 'Engagement', 'Standard'], uploadedBy: 'u1', uploadedAt: fmt(subDays(today, 60)), description: 'Standard engagement letter template' },
+  { id: 'd7', folderId: 'f1', name: 'Client_KYC_Form.pdf', type: 'pdf', size: '120 KB', clientId: null, tags: ['Template', 'KYC'], uploadedBy: 'u1', uploadedAt: fmt(subDays(today, 90)), description: 'Standard KYC form for new clients' },
+  { id: 'd8', folderId: 'f6', name: 'GSTR-3B_Nov2024.pdf', type: 'pdf', size: '1.1 MB', clientId: 'c1', tags: ['GST', 'GSTR-3B'], uploadedBy: 'u2', uploadedAt: fmt(subDays(today, 1)), description: 'Draft GSTR-3B for November' },
 ];
 
 export const INIT_FOLDERS: Folder[] = [

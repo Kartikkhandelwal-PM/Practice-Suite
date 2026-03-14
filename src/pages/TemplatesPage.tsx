@@ -6,12 +6,12 @@ import { Plus, Edit2, Trash2, X, GripVertical, LayoutTemplate, Clock, CheckCircl
 import { TypeChip } from '../components/ui/Badges';
 import { Modal } from '../components/ui/Modal';
 import { TaskModal } from '../components/ui/TaskModal';
-import { genId, today, fmt } from '../utils';
+import { genUUID, today, fmt } from '../utils';
 import { Template, Task } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 
 export function TemplatesPage() {
-  const { templates, setTemplates, tasks } = useApp();
+  const { templates, tasks, addTemplate, updateTemplate, deleteTemplate } = useApp();
   const toast = useToast();
   const { confirm } = useConfirm();
 
@@ -25,7 +25,7 @@ export function TemplatesPage() {
   const filtered = templates.filter(t => !filter || t.category === filter || filter === 'All');
 
   const openCreate = () => {
-    setForm({ id: genId(), name: '', category: 'GST', recurring: 'Monthly', estHours: '', description: '', subtasks: [], color: '#2563eb' });
+    setForm({ id: genUUID(), name: '', category: 'GST', recurring: 'Monthly', estHours: '', description: '', subtasks: [], color: '#2563eb' });
     setModal('create');
   };
   
@@ -42,7 +42,7 @@ export function TemplatesPage() {
       type: t.category,
       description: t.description,
       recurring: t.recurring,
-      subtasks: t.subtasks.map(s => ({ id: genId(), title: s, done: false })),
+      subtasks: t.subtasks.map(s => ({ id: genUUID(), title: s, done: false })),
       status: 'To Do',
       dueDate: fmt(today),
       tags: [],
@@ -55,22 +55,32 @@ export function TemplatesPage() {
     setModal(null);
   };
 
-  const saveTmpl = () => {
+  const saveTmpl = async () => {
     if (!form?.name.trim()) { toast('Template name required', 'error'); return; }
-    if (modal === 'create') {
-      setTemplates(t => [...t, form]);
-    } else {
-      setTemplates(t => t.map(x => x.id === form.id ? form : x));
+    try {
+      if (modal === 'create') {
+        await addTemplate(form);
+      } else {
+        await updateTemplate(form.id, form);
+      }
+      toast(modal === 'create' ? 'Template created' : 'Template updated', 'success');
+      setModal(null);
+      setForm(null);
+    } catch (error) {
+      console.error('Error saving template:', error);
+      toast('Failed to save template', 'error');
     }
-    toast(modal === 'create' ? 'Template created' : 'Template updated', 'success');
-    setModal(null);
-    setForm(null);
   };
 
-  const deleteTmpl = async (id: string) => {
+  const delTmpl = async (id: string) => {
     if (await confirm({ title: 'Delete Template', message: 'Are you sure you want to delete this template?', danger: true })) {
-      setTemplates(t => t.filter(x => x.id !== id));
-      toast('Template deleted');
+      try {
+        await deleteTemplate(id);
+        toast('Template deleted', 'success');
+      } catch (error) {
+        console.error('Error deleting template:', error);
+        toast('Failed to delete template', 'error');
+      }
     }
   };
 
@@ -114,7 +124,7 @@ export function TemplatesPage() {
               </div>
               <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-900" onClick={() => openEdit(t)}><Edit2 size={12} /></button>
-                <button className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600" onClick={() => deleteTmpl(t.id)}><Trash2 size={12} /></button>
+                <button className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600" onClick={() => delTmpl(t.id)}><Trash2 size={12} /></button>
               </div>
             </div>
             

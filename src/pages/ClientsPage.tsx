@@ -8,13 +8,13 @@ import { Toggle } from '../components/ui/Toggle';
 import { TypeChip, StatusBadge } from '../components/ui/Badges';
 import { Avatar } from '../components/ui/Avatar';
 import { TaskModal } from '../components/ui/TaskModal';
-import { genId, fmt, today, daysLeft, TYPE_COLORS } from '../utils';
+import { genUUID, fmt, today, daysLeft, TYPE_COLORS } from '../utils';
 import { Client, Task } from '../types';
 import { Pagination } from '../components/ui/Pagination';
 import { PageHeader } from '../components/ui/PageHeader';
 
 export function ClientsPage() {
-  const { clients, setClients, users, tasks } = useApp();
+  const { clients, users, tasks, currentUser, addClient, updateClient, deleteClient } = useApp();
   const toast = useToast();
   const { confirm } = useConfirm();
 
@@ -45,7 +45,7 @@ export function ClientsPage() {
   const paginatedClients = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const openNew = () => {
-    setForm({ id: genId(), name: '', pan: '', gstin: '', category: 'Pvt Ltd', services: [], manager: 'u1', email: '', phone: '', address: '', onboarded: fmt(today), active: true });
+    setForm({ id: genUUID(), name: '', pan: '', gstin: '', category: 'Pvt Ltd', services: [], manager: currentUser?.id || 'u1', email: '', phone: '', address: '', onboarded: fmt(today), active: true });
     setModal('form');
   };
   
@@ -54,22 +54,32 @@ export function ClientsPage() {
     setModal('form');
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form?.name || !form?.pan) { toast('Name and PAN are required', 'error'); return; }
-    if (clients.find(c => c.id === form.id)) {
-      setClients(c => c.map(x => x.id === form.id ? form : x));
-    } else {
-      setClients(c => [...c, form]);
+    try {
+      if (clients.find(c => c.id === form.id)) {
+        await updateClient(form.id, form);
+      } else {
+        await addClient(form);
+      }
+      toast('Client saved', 'success');
+      setModal(null);
+      setForm(null);
+    } catch (error) {
+      console.error('Error saving client:', error);
+      toast('Failed to save client', 'error');
     }
-    toast('Client saved', 'success');
-    setModal(null);
-    setForm(null);
   };
 
   const del = async (id: string) => {
     if (await confirm({ title: 'Delete Client', message: 'Are you sure you want to delete this client?', danger: true })) {
-      setClients(c => c.filter(x => x.id !== id));
-      toast('Client deleted');
+      try {
+        await deleteClient(id);
+        toast('Client deleted', 'success');
+      } catch (error) {
+        console.error('Error deleting client:', error);
+        toast('Failed to delete client', 'error');
+      }
     }
   };
 
@@ -139,7 +149,9 @@ export function ClientsPage() {
           <div className="px-5 py-4 border-b border-gray-200">
             <h3 className="font-semibold text-[15px] text-gray-900">Task History</h3>
           </div>
-          <div className="overflow-x-auto">
+          
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
@@ -191,6 +203,40 @@ export function ClientsPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden divide-y divide-gray-100">
+            {ct.length === 0 && (
+              <div className="flex flex-col items-center justify-center p-8 text-gray-500">
+                <p>No tasks for this client.</p>
+              </div>
+            )}
+            {ct.map(t => {
+              const a = users.find(u => u.id === t.assigneeId);
+              return (
+                <div key={t.id} className="p-4 hover:bg-gray-50 transition-colors" onClick={() => openEditTask(t)}>
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono text-gray-400">#{t.id}</span>
+                      <div className="font-bold text-[13px] text-blue-600">{t.title}</div>
+                    </div>
+                    <StatusBadge status={t.status} />
+                  </div>
+                  
+                  <div className="flex items-center justify-between mt-3">
+                    <div className="flex items-center gap-2">
+                      <TypeChip type={t.type} />
+                      <span className="text-[11px] text-gray-500">{new Date(t.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Avatar user={a} size={18} />
+                      <span className="text-[11px] text-gray-600">{a?.name?.split(' ')[0] || '—'}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {isTaskModalOpen && (
@@ -231,70 +277,137 @@ export function ClientsPage() {
         </select>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-        <table className="w-full border-collapse text-left">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Client</th>
-              <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Category</th>
-              <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">PAN</th>
-              <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">GSTIN</th>
-              <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Services</th>
-              <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Manager</th>
-              <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="text-[13px] text-gray-700">
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={8}>
-                  <div className="flex flex-col items-center justify-center p-12 text-gray-500 gap-3">
-                    <Users size={32} className="opacity-30" />
-                    <h3 className="font-semibold text-gray-700 text-[15px]">No clients found</h3>
-                  </div>
-                </td>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Client</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Category</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">PAN</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">GSTIN</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Services</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Manager</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
-            )}
-            {paginatedClients.map(c => {
-              const mgr = users.find(u => u.id === c.manager);
-              return (
-                <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="font-semibold text-[13px] text-blue-600 hover:underline cursor-pointer" onClick={() => { setSelected(c); setModal('view'); }}>{c.name}</div>
-                    <div className="text-[11px] text-gray-400 mt-0.5">{c.email}</div>
-                  </td>
-                  <td className="px-4 py-3 text-[12px]">{c.category}</td>
-                  <td className="px-4 py-3 text-[12px] font-mono">{c.pan}</td>
-                  <td className="px-4 py-3 text-[11.5px] font-mono">{c.gstin || '—'}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1 flex-wrap">
-                      {c.services.slice(0, 3).map(s => <TypeChip key={s} type={s} />)}
-                      {c.services.length > 3 && <span className="text-[10px] text-gray-400 font-medium mt-0.5">+{c.services.length - 3}</span>}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <Avatar user={mgr} size={20} />
-                      <span className="text-[12px]">{mgr?.name?.split(' ')[0] || '—'}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold ${c.active ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>
-                      {c.active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1">
-                      <button className="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-gray-900 transition-colors" onClick={() => openEdit(c)}><Edit2 size={13} /></button>
-                      <button className="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => del(c.id)}><Trash2 size={13} /></button>
+            </thead>
+            <tbody className="text-[13px] text-gray-700">
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={8}>
+                    <div className="flex flex-col items-center justify-center p-12 text-gray-500 gap-3">
+                      <Users size={32} className="opacity-30" />
+                      <h3 className="font-semibold text-gray-700 text-[15px]">No clients found</h3>
                     </div>
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              )}
+              {paginatedClients.map(c => {
+                const mgr = users.find(u => u.id === c.manager);
+                return (
+                  <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-[13px] text-blue-600 hover:underline cursor-pointer" onClick={() => { setSelected(c); setModal('view'); }}>{c.name}</div>
+                      <div className="text-[11px] text-gray-400 mt-0.5">{c.email}</div>
+                    </td>
+                    <td className="px-4 py-3 text-[12px]">{c.category}</td>
+                    <td className="px-4 py-3 text-[12px] font-mono">{c.pan}</td>
+                    <td className="px-4 py-3 text-[11.5px] font-mono">{c.gstin || '—'}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1 flex-wrap">
+                        {c.services.slice(0, 3).map(s => <TypeChip key={s} type={s} />)}
+                        {c.services.length > 3 && <span className="text-[10px] text-gray-400 font-medium mt-0.5">+{c.services.length - 3}</span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <Avatar user={mgr} size={20} />
+                        <span className="text-[12px]">{mgr?.name?.split(' ')[0] || '—'}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold ${c.active ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>
+                        {c.active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1">
+                        <button className="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-gray-900 transition-colors" onClick={() => openEdit(c)}><Edit2 size={13} /></button>
+                        <button className="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => del(c.id)}><Trash2 size={13} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {filtered.length === 0 && (
+            <div className="flex flex-col items-center justify-center p-12 text-gray-500 gap-3">
+              <Users size={32} className="opacity-30" />
+              <h3 className="font-semibold text-gray-700 text-[15px]">No clients found</h3>
+            </div>
+          )}
+          {paginatedClients.map(c => {
+            const mgr = users.find(u => u.id === c.manager);
+            return (
+              <div key={c.id} className="p-4 hover:bg-gray-50 transition-colors" onClick={() => { setSelected(c); setModal('view'); }}>
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <div className="font-bold text-[14px] text-blue-600">{c.name}</div>
+                    <div className="text-[11px] text-gray-400">{c.email}</div>
+                  </div>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${c.active ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>
+                    {c.active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-y-2 mb-3">
+                  <div>
+                    <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">PAN</div>
+                    <div className="text-[12px] font-mono">{c.pan}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Category</div>
+                    <div className="text-[12px]">{c.category}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-1 flex-wrap">
+                    {c.services.slice(0, 2).map(s => <TypeChip key={s} type={s} />)}
+                    {c.services.length > 2 && <span className="text-[10px] text-gray-400 font-medium mt-0.5">+{c.services.length - 2}</span>}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Avatar user={mgr} size={18} />
+                    <span className="text-[11px] text-gray-600">{mgr?.name?.split(' ')[0] || '—'}</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-gray-50">
+                  <button 
+                    className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                    onClick={(e) => { e.stopPropagation(); openEdit(c); }}
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                  <button 
+                    className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                    onClick={(e) => { e.stopPropagation(); del(c.id); }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
         <Pagination 
           totalItems={filtered.length}
           itemsPerPage={itemsPerPage}

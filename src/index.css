@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "mobile-drag-drop/default.css";
 @plugin "@tailwindcss/typography";
 
 @theme {
@@ -26,6 +27,14 @@
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: #9ca3af;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 
   .animate-fade-in {

@@ -2,42 +2,57 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
-import { ArrowRight, CheckCircle2, ShieldCheck, Sparkles, Building2, Users } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ShieldCheck, Sparkles, Building2, Mail, Lock, User as UserIcon } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 export function AuthPage() {
   const { setIsAuthenticated } = useApp();
   const toast = useToast();
-  const [step, setStep] = useState<'phone' | 'otp'>('phone');
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handlePhoneSubmit = (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (phone !== '9509264338') {
-      toast('Invalid phone number. Use testing number: 9509264338', 'error');
-      return;
-    }
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      setStep('otp');
-      toast('OTP sent successfully', 'success');
-    }, 1000);
-  };
 
-  const handleOtpSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (otp !== '1104') {
-      toast('Invalid OTP. Use testing OTP: 1104', 'error');
-      return;
-    }
-    setIsLoading(true);
-    setTimeout(() => {
+    try {
+      if (mode === 'login' && email.trim().toLowerCase() === 'demo@kdk.local' && password === 'demo123') {
+        localStorage.setItem('kdk-demo-mode', 'true');
+        setIsAuthenticated(true);
+        window.location.reload();
+        return;
+      }
+
+      if (mode === 'signup') {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+            },
+          },
+        });
+        if (error) throw error;
+        toast('Account created! Please check your email for verification.', 'success');
+        setMode('login');
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+        toast('Welcome back!', 'success');
+        setIsAuthenticated(true);
+      }
+    } catch (error: any) {
+      toast(error.message || 'Authentication failed', 'error');
+    } finally {
       setIsLoading(false);
-      setIsAuthenticated(true);
-      toast('Welcome back!', 'success');
-    }, 1000);
+    }
   };
 
   return (
@@ -99,7 +114,7 @@ export function AuthPage() {
                   <Building2 size={20} className="text-emerald-400" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-[15px] mb-1">Practice Management</h3>
+                  <h3 className="font-semibold text-[15px] mb-1">Practice Suite</h3>
                   <p className="text-[13px] text-white/50">Kanban boards, document vault, and more.</p>
                 </div>
               </div>
@@ -132,106 +147,102 @@ export function AuthPage() {
 
           <div className="bg-white p-8 rounded-2xl shadow-xl shadow-gray-200/50 border border-gray-100">
             <AnimatePresence mode="wait">
-              {step === 'phone' ? (
-                <motion.div
-                  key="phone"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome back</h2>
-                  <p className="text-[14px] text-gray-500 mb-8">Enter your phone number to sign in or create an account.</p>
+              <motion.div
+                key={mode}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.3 }}
+              >
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  {mode === 'login' ? 'Welcome back' : 'Create an account'}
+                </h2>
+                <p className="text-[14px] text-gray-500 mb-8">
+                  {mode === 'login' 
+                    ? 'Enter your credentials to access your workspace.' 
+                    : 'Join the modern platform for tax professionals.'}
+                </p>
 
-                  <form onSubmit={handlePhoneSubmit} className="space-y-5">
+                {mode === 'login' && (
+                  <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] text-amber-800">
+                    Demo access: `demo@kdk.local` / `demo123`
+                  </div>
+                )}
+
+                <form onSubmit={handleAuth} className="space-y-5">
+                  {mode === 'signup' && (
                     <div>
-                      <label className="block text-[13px] font-semibold text-gray-700 mb-2">Phone Number</label>
+                      <label className="block text-[13px] font-semibold text-gray-700 mb-2">Full Name</label>
                       <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">+91</span>
+                        <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                         <input
-                          type="tel"
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                          placeholder="9509264338"
+                          type="text"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          placeholder="John Doe"
                           className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-[15px] outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
                           required
-                          autoFocus
                         />
                       </div>
                     </div>
+                  )}
 
-                    <button
-                      type="submit"
-                      disabled={isLoading || phone.length < 10}
-                      className="w-full bg-[#0d1117] hover:bg-black text-white py-3 rounded-xl text-[15px] font-medium flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isLoading ? (
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <>Continue <ArrowRight size={18} /></>
-                      )}
-                    </button>
-                  </form>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="otp"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <button 
-                    onClick={() => setStep('phone')}
-                    className="text-[13px] text-blue-600 font-medium hover:underline mb-6 flex items-center gap-1"
-                  >
-                    &larr; Back
-                  </button>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Verify your number</h2>
-                  <p className="text-[14px] text-gray-500 mb-8">
-                    We've sent a 4-digit code to <span className="font-semibold text-gray-900">+91 {phone}</span>
-                  </p>
-
-                  <form onSubmit={handleOtpSubmit} className="space-y-6">
-                    <div>
-                      <label className="block text-[13px] font-semibold text-gray-700 mb-2">Verification Code</label>
+                  <div>
+                    <label className="block text-[13px] font-semibold text-gray-700 mb-2">Email Address</label>
+                    <div className="relative">
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                       <input
-                        type="text"
-                        value={otp}
-                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                        placeholder="1104"
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-[20px] tracking-[0.5em] text-center font-mono outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="name@company.com"
+                        className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-[15px] outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
                         required
-                        autoFocus
                       />
                     </div>
-
-                    <button
-                      type="submit"
-                      disabled={isLoading || otp.length < 4}
-                      className="w-full bg-[#0d1117] hover:bg-black text-white py-3 rounded-xl text-[15px] font-medium flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isLoading ? (
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <>Verify & Sign In <CheckCircle2 size={18} /></>
-                      )}
-                    </button>
-                  </form>
-                  
-                  <div className="mt-6 text-center">
-                    <button className="text-[13px] text-gray-500 font-medium hover:text-gray-900 transition-colors">
-                      Didn't receive the code? Resend
-                    </button>
                   </div>
-                </motion.div>
-              )}
+
+                  <div>
+                    <label className="block text-[13px] font-semibold text-gray-700 mb-2">Password</label>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-[15px] outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full bg-[#0d1117] hover:bg-black text-white py-3 rounded-xl text-[15px] font-medium flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        {mode === 'login' ? 'Sign In' : 'Create Account'}
+                        <ArrowRight size={18} />
+                      </>
+                    )}
+                  </button>
+                </form>
+
+                <div className="mt-6 text-center">
+                  <button 
+                    onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
+                    className="text-[13px] text-blue-600 font-medium hover:underline"
+                  >
+                    {mode === 'login' ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
+                  </button>
+                </div>
+              </motion.div>
             </AnimatePresence>
-          </div>
-          
-          <div className="mt-8 text-center text-[13px] text-gray-500">
-            Testing Credentials:<br/>
-            Phone: <strong>9509264338</strong> | OTP: <strong>1104</strong>
           </div>
         </div>
       </div>

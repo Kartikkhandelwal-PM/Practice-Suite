@@ -4,9 +4,9 @@ import { useToast } from '../context/ToastContext';
 import { Search, Filter, Plus, Calendar, Reply, Forward, Paperclip, Link as LinkIcon, Settings, Bot, CheckCircle2, Mail, X, Send, Inbox, Send as SendIcon, FileText, Trash2 } from 'lucide-react';
 import { Email } from '../types';
 import { TaskModal } from '../components/ui/TaskModal';
-import { fmt, today } from '../utils';
-import { GoogleGenAI, Type } from '@google/genai';
+import { genUUID, fmt, today } from '../utils';
 import { RichTextEditor } from '../components/ui/RichTextEditor';
+import { summarizeEmail, improveDraft, EmailSummary } from '../services/geminiService';
 
 function EmailAutocompleteInput({ value = '', onChange, placeholder, users, clients }: any) {
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -63,9 +63,8 @@ function EmailAutocompleteInput({ value = '', onChange, placeholder, users, clie
 }
 
 export function InboxPage() {
-  const { emails, setEmails, clients, users } = useApp();
+  const { emails, clients, users, currentUser, addEmail, updateEmail, deleteEmail } = useApp();
   const toast = useToast();
-  const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
   const [search, setSearch] = useState('');
   const [clientFilter, setClientFilter] = useState('');
@@ -77,6 +76,28 @@ export function InboxPage() {
   const [showCcBcc, setShowCcBcc] = useState(false);
   const [aiDraft, setAiDraft] = useState<{ subject: string, body: string } | null>(null);
   const [isDrafting, setIsDrafting] = useState(false);
+  const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
+  const [emailSummary, setEmailSummary] = useState<EmailSummary | null>(null);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+
+  React.useEffect(() => {
+    if (selectedEmail && currentFolder === 'inbox') {
+      const fetchSummary = async () => {
+        setIsSummarizing(true);
+        const summary = await summarizeEmail(
+          selectedEmail.subject,
+          selectedEmail.body,
+          selectedEmail.from,
+          currentUser?.name || 'User'
+        );
+        setEmailSummary(summary);
+        setIsSummarizing(false);
+      };
+      fetchSummary();
+    } else {
+      setEmailSummary(null);
+    }
+  }, [selectedEmail, currentFolder, currentUser]);
 
   const openCompose = (type: 'compose' | 'reply' | 'forward', email?: Email | null, draftBody?: string) => {
     setComposeModal({ isOpen: true, type, email });
@@ -105,55 +126,28 @@ export function InboxPage() {
   };
 
   const handleAiDraft = async () => {
-    if (!geminiApiKey) {
-      toast('Set VITE_GEMINI_API_KEY in .env.local to use AI draft', 'error');
-      return;
-    }
-
     setIsDrafting(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-      const prompt = composeData.body.trim()
-        ? `Please rephrase and improve the following email draft to be more professional and clear. Return a JSON object with two keys: "subject" (a concise, professional subject line) and "body" (the improved email body in HTML format, using <p>, <br>, <strong> etc. for formatting). Do not include any extra conversational text or markdown code blocks outside the JSON.\n\nOriginal Subject: ${composeData.subject}\nOriginal Body: ${composeData.body}`
-        : `Please write a professional email draft based on the subject: "${composeData.subject}". Return a JSON object with two keys: "subject" (a concise, professional subject line) and "body" (the email body in HTML format, using <p>, <br>, <strong> etc. for formatting). Do not include any extra conversational text or markdown code blocks outside the JSON.`;
-      
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              subject: { type: Type.STRING },
-              body: { type: Type.STRING }
-            },
-            required: ["subject", "body"]
-          }
-        }
-      });
-      
-      const result = JSON.parse(response.text || '{}');
+      const result = await improveDraft(composeData.subject, composeData.body);
       setAiDraft({ subject: result.subject || composeData.subject, body: result.body || 'Failed to generate draft.' });
     } catch (error) {
-      console.error('AI draft failed', error);
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      toast(`Failed to generate AI draft: ${message}`, 'error');
+      console.error(error);
+      toast('Failed to generate AI draft', 'error');
     } finally {
       setIsDrafting(false);
     }
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!composeData.to) {
       toast('Please specify at least one recipient', 'error');
       return;
     }
     
     const newEmail: Email = {
-      id: `email-${Date.now()}`,
-      from: 'Rajesh Kumar',
-      fromEmail: 'rajesh@kdkfirm.in',
+      id: genUUID(),
+      from: currentUser?.name || 'User',
+      fromEmail: currentUser?.email || 'user@example.com',
       to: composeData.to,
       cc: composeData.cc,
       bcc: composeData.bcc,
@@ -169,25 +163,28 @@ export function InboxPage() {
       folder: 'sent'
     };
     
-    let updatedEmails = [newEmail, ...emails];
-    if (composeModal.email?.folder === 'drafts') {
-      updatedEmails = updatedEmails.filter(e => e.id !== composeModal.email!.id);
-    }
-    
-    setEmails(updatedEmails);
-    toast('Message sent successfully', 'success');
-    setComposeModal({ isOpen: false, type: 'compose' });
-    if (currentFolder === 'sent') {
-      setSelectedEmail(newEmail);
+    try {
+      if (composeModal.email?.folder === 'drafts') {
+        await deleteEmail(composeModal.email!.id);
+      }
+      await addEmail(newEmail);
+      toast('Message sent successfully', 'success');
+      setComposeModal({ isOpen: false, type: 'compose' });
+      if (currentFolder === 'sent') {
+        setSelectedEmail(newEmail);
+      }
+    } catch (error) {
+      console.error('Error sending email:', error);
+      toast('Failed to send message', 'error');
     }
   };
 
-  const handleClose = () => {
+  const handleClose = async () => {
     if (composeData.body.trim() || composeData.subject.trim() || composeData.to.trim()) {
       const draftEmail: Email = {
-        id: composeModal.email?.folder === 'drafts' ? composeModal.email.id : `email-${Date.now()}`,
-        from: 'Rajesh Kumar',
-        fromEmail: 'rajesh@kdkfirm.in',
+        id: composeModal.email?.folder === 'drafts' ? composeModal.email.id : genUUID(),
+        from: currentUser?.name || 'User',
+        fromEmail: currentUser?.email || 'user@example.com',
         to: composeData.to,
         cc: composeData.cc,
         bcc: composeData.bcc,
@@ -203,20 +200,28 @@ export function InboxPage() {
         folder: 'drafts'
       };
       
-      if (composeModal.email?.folder === 'drafts') {
-        setEmails(emails.map(e => e.id === draftEmail.id ? draftEmail : e));
-      } else {
-        setEmails([draftEmail, ...emails]);
+      try {
+        if (composeModal.email?.folder === 'drafts') {
+          await updateEmail(draftEmail.id, draftEmail);
+        } else {
+          await addEmail(draftEmail);
+        }
+        toast('Draft saved', 'success');
+      } catch (error) {
+        console.error('Error saving draft:', error);
       }
-      toast('Draft saved', 'success');
     }
     setComposeModal({ isOpen: false, type: 'compose' });
   };
 
-  const handleDiscard = () => {
+  const handleDiscard = async () => {
     if (composeModal.email?.folder === 'drafts') {
-      setEmails(emails.filter(e => e.id !== composeModal.email!.id));
-      toast('Draft discarded', 'success');
+      try {
+        await deleteEmail(composeModal.email!.id);
+        toast('Draft discarded', 'success');
+      } catch (error) {
+        console.error('Error discarding draft:', error);
+      }
     }
     setComposeModal({ isOpen: false, type: 'compose' });
   };
@@ -229,7 +234,7 @@ export function InboxPage() {
     return true;
   });
 
-  const handleEmailClick = (email: Email) => {
+  const handleEmailClick = async (email: Email) => {
     if (email.folder === 'drafts') {
       setComposeData({
         to: email.to || '',
@@ -242,8 +247,13 @@ export function InboxPage() {
       return;
     }
     setSelectedEmail(email);
+    setMobileView('detail');
     if (!email.read) {
-      setEmails(emails.map(e => e.id === email.id ? { ...e, read: true } : e));
+      try {
+        await updateEmail(email.id, { read: true });
+      } catch (error) {
+        console.error('Error marking email as read:', error);
+      }
     }
   };
 
@@ -251,131 +261,39 @@ export function InboxPage() {
     setIsTaskModalOpen(true);
   };
 
-  const getAITaskDetails = (email: Email) => {
-    const text = (email.subject + " " + email.body).toLowerCase();
-    
-    if (text.includes('notice') || text.includes('defective')) {
-      return {
-        title: `Respond to Notice u/s 139(9): ${email.from}`,
-        overview: "Tax notice received regarding computation mismatch in Schedule BP.",
-        steps: [
-          "Download notice from Income Tax Portal.",
-          "Review mismatch in Schedule BP.",
-          "File rectified return within 15 days."
-        ]
-      };
-    }
-    
-    if (text.includes('document') || text.includes('attached')) {
-      return {
-        title: `File GSTR-3B (Oct 2024) for ${email.from.split(' ')[0]}`,
-        overview: "Documents received for GSTR-3B filing (Oct 2024).",
-        steps: [
-          "Reconcile 47 purchase invoices and HDFC bank statements.",
-          "Apply ₹1,42,000 ITC credit from September.",
-          "File GSTR-3B before Nov 20th."
-        ]
-      };
-    }
-    
-    if (text.includes('audit') && text.includes('meeting')) {
-      return {
-        title: `Schedule Audit Discussion with ${email.from.split(' ')[0]}`,
-        overview: "Client requested meeting to discuss FY 23-24 audit findings.",
-        steps: [
-          "Review draft audit report.",
-          "Schedule meeting for Thursday/Friday afternoon."
-        ]
-      };
-    }
-
-    if (text.includes('salary') || text.includes('tds')) {
-      return {
-        title: `Process Q2 TDS for ${email.from.split(' ')[0]}`,
-        overview: "Q2 salary register received for 48 employees.",
-        steps: [
-          "Verify total salary (₹38,42,000) and TDS (₹3,12,400).",
-          "File 24Q TDS return.",
-          "Generate Form 16/16A."
-        ]
-      };
-    }
-
-    return {
-      title: `Follow up: ${email.subject}`,
-      overview: "General client communication.",
-      steps: [
-        "Review email and take necessary action."
-      ]
-    };
-  };
-
-  const generateTaskDescription = (email: Email) => {
-    const details = getAITaskDetails(email);
-    const stepsHtml = details.steps.map(step => `<li>${step}</li>`).join('');
-    
-    return `<p><strong>Task Overview:</strong> ${details.overview}</p>
-<p><strong>Action Items:</strong></p>
-<ul>
-${stepsHtml}
-</ul>`;
-  };
-
-  const getAIDraftReply = (email: Email) => {
-    const text = (email.subject + " " + email.body).toLowerCase();
-    
-    if (text.includes('notice') || text.includes('defective')) {
-      return `Dear ${email.from.split(' ')[0]},\n\nWe have received the notice u/s 139(9) regarding the defective return. Our team is reviewing the computation mismatch in Schedule BP. We will prepare the rectified computation and share it with you for approval before filing the response within the 15-day deadline.\n\nRegards,\nRajesh`;
-    }
-    
-    if (text.includes('document') || text.includes('attached')) {
-      return `Dear ${email.from.split(' ')[0]},\n\nThank you for sharing the documents for the October GSTR-3B filing. We have received the 47 invoices, bank statements, and noted the ₹1,42,000 ITC credit. We will prepare the computation and share it with you shortly before the 20th Nov deadline.\n\nRegards,\nRajesh`;
-    }
-    
-    if (text.includes('audit') && text.includes('meeting')) {
-      return `Dear ${email.from.split(' ')[0]},\n\nThanks for reaching out. I am available this Thursday at 3:00 PM to discuss the FY 23-24 audit findings. Let me know if this time works for you, and I will send over a calendar invite.\n\nRegards,\nRajesh`;
-    }
-
-    if (text.includes('salary') || text.includes('tds')) {
-      return `Dear ${email.from.split(' ')[0]},\n\nReceived the Q2 salary register and Form 12BA. We will process the TDS computation for the 48 employees and proceed with the 24Q filing.\n\nRegards,\nRajesh`;
-    }
-
-    return `Dear ${email.from.split(' ')[0]},\n\nThank you for your email. We have received it and will get back to you shortly.\n\nRegards,\nRajesh`;
-  };
-
   return (
-    <div className="flex-1 flex flex-col animate-slide-up bg-[#f4f5f7]">
+    <div className="flex-1 flex flex-col animate-slide-up bg-[#f4f5f7] p-4 lg:p-8 overflow-y-auto">
       {/* Top Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-4">
           <h1 className="text-[24px] font-serif font-bold text-gray-900">Email & Inbox</h1>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus-within:border-blue-600 transition-colors w-[250px]">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus-within:border-blue-600 transition-colors w-full sm:w-[250px]">
             <Search size={14} className="text-gray-400 shrink-0" />
             <input 
-              placeholder="Search tasks, clients, compliance" 
+              placeholder="Search tasks, clients..." 
               className="border-none bg-transparent outline-none text-[13px] w-full text-gray-900"
             />
           </div>
-          <button className="bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-[13px] font-medium flex items-center gap-2 hover:bg-gray-50 transition-colors">
+          <button className="flex-1 sm:flex-none bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-[13px] font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors">
             <Filter size={14} /> Filter
           </button>
-          <button onClick={() => openCompose('compose')} className="bg-[#d9534f] hover:bg-[#c9302c] text-white px-4 py-1.5 rounded-lg text-[13px] font-medium flex items-center gap-2 transition-colors">
+          <button onClick={() => openCompose('compose')} className="flex-1 sm:flex-none bg-[#d9534f] hover:bg-[#c9302c] text-white px-4 py-1.5 rounded-lg text-[13px] font-medium flex items-center justify-center gap-2 transition-colors">
             <Plus size={14} /> Compose
           </button>
         </div>
       </div>
 
       {/* Email Integration Bar */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
           <h2 className="text-[18px] font-serif font-bold text-gray-900">Email Integration</h2>
-          <span className="text-[13px] text-gray-500">Connected: rajesh@kdkfirm.in</span>
+          <span className="text-[13px] text-gray-500">Connected: {currentUser?.email || 'rajesh@kdkfirm.in'}</span>
         </div>
         <div className="flex items-center gap-2">
           <select 
-            className="bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-[13px] font-medium outline-none focus:border-blue-500 hover:bg-gray-50 transition-colors cursor-pointer"
+            className="w-full sm:w-auto bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-[13px] font-medium outline-none focus:border-blue-500 hover:bg-gray-50 transition-colors cursor-pointer"
             value={clientFilter}
             onChange={e => setClientFilter(e.target.value)}
           >
@@ -386,42 +304,42 @@ ${stepsHtml}
       </div>
 
       {/* Main Content Area */}
-      <div className="bg-white border border-gray-200 rounded-xl flex-1 flex overflow-hidden min-h-[500px] shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-xl flex-1 flex flex-col lg:flex-row overflow-hidden min-h-[500px] shadow-sm">
         
         {/* Sidebar: Folders */}
-        <div className="w-[200px] shrink-0 border-r border-gray-200 flex flex-col bg-gray-50/50 p-3">
-          <div className="space-y-1">
+        <div className={`w-full lg:w-[200px] shrink-0 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col bg-gray-50/50 p-3 max-h-[150px] lg:max-h-none overflow-y-auto ${mobileView === 'detail' ? 'hidden lg:flex' : 'flex'}`}>
+          <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
             <button 
               onClick={() => { setCurrentFolder('inbox'); setSelectedEmail(null); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${currentFolder === 'inbox' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'}`}
+              className={`flex-1 lg:w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13px] font-medium transition-colors whitespace-nowrap ${currentFolder === 'inbox' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'}`}
             >
               <div className="flex items-center gap-2">
                 <Inbox size={16} className={currentFolder === 'inbox' ? 'text-blue-600' : 'text-gray-400'} />
                 Inbox
               </div>
               {emails.filter(e => (!e.folder || e.folder === 'inbox') && !e.read).length > 0 && (
-                <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[11px] font-bold">
+                <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[11px] font-bold ml-2">
                   {emails.filter(e => (!e.folder || e.folder === 'inbox') && !e.read).length}
                 </span>
               )}
             </button>
             <button 
               onClick={() => { setCurrentFolder('sent'); setSelectedEmail(null); }}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${currentFolder === 'sent' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'}`}
+              className={`flex-1 lg:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors whitespace-nowrap ${currentFolder === 'sent' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'}`}
             >
               <SendIcon size={16} className={currentFolder === 'sent' ? 'text-blue-600' : 'text-gray-400'} />
               Sent
             </button>
             <button 
               onClick={() => { setCurrentFolder('drafts'); setSelectedEmail(null); }}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${currentFolder === 'drafts' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'}`}
+              className={`flex-1 lg:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors whitespace-nowrap ${currentFolder === 'drafts' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'}`}
             >
               <FileText size={16} className={currentFolder === 'drafts' ? 'text-blue-600' : 'text-gray-400'} />
               Drafts
             </button>
             <button 
               onClick={() => { setCurrentFolder('trash'); setSelectedEmail(null); }}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${currentFolder === 'trash' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'}`}
+              className={`flex-1 lg:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors whitespace-nowrap ${currentFolder === 'trash' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'}`}
             >
               <Trash2 size={16} className={currentFolder === 'trash' ? 'text-blue-600' : 'text-gray-400'} />
               Trash
@@ -430,7 +348,7 @@ ${stepsHtml}
         </div>
 
         {/* Middle Pane: Email List */}
-        <div className="w-[320px] shrink-0 border-r border-gray-200 flex flex-col bg-white">
+        <div className={`w-full lg:w-[320px] shrink-0 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col bg-white ${mobileView === 'detail' ? 'hidden lg:flex' : 'flex-1 lg:flex-none'}`}>
           <div className="p-3 border-b border-gray-200 shrink-0">
             <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 focus-within:border-blue-600 transition-colors">
               <input 
@@ -473,13 +391,22 @@ ${stepsHtml}
         </div>
 
         {/* Right Pane: Email Detail */}
-        <div className="flex-1 flex flex-col bg-white min-w-0">
+        <div className={`flex-1 flex flex-col bg-white min-w-0 ${mobileView === 'list' ? 'hidden lg:flex' : 'flex'}`}>
           {selectedEmail ? (
             <>
-              <div className="p-6 border-b border-gray-100 shrink-0">
-                <h2 className="text-[22px] font-serif font-bold text-gray-900 mb-4">{selectedEmail.subject}</h2>
+              <div className="p-4 lg:p-6 border-b border-gray-100 shrink-0">
+                <div className="flex items-center gap-2 mb-4 lg:hidden">
+                  <button 
+                    onClick={() => setMobileView('list')}
+                    className="p-2 -ml-2 text-gray-500 hover:text-gray-900"
+                  >
+                    <X size={20} />
+                  </button>
+                  <span className="text-[14px] font-bold text-gray-700">Back to List</span>
+                </div>
+                <h2 className="text-[18px] lg:text-[22px] font-serif font-bold text-gray-900 mb-4">{selectedEmail.subject}</h2>
                 
-                <div className="text-[13px] text-gray-600 mb-4">
+                <div className="text-[12px] lg:text-[13px] text-gray-600 mb-4">
                   From: <span className="font-semibold text-gray-900">{selectedEmail.from}</span> &lt;{selectedEmail.fromEmail}&gt; · To: {selectedEmail.to || 'rajesh@kdkfirm.in'}
                   {selectedEmail.cc && ` · CC: ${selectedEmail.cc}`}
                   {selectedEmail.bcc && ` · BCC: ${selectedEmail.bcc}`}
@@ -494,29 +421,29 @@ ${stepsHtml}
                           className="bg-[#d9534f] hover:bg-[#c9302c] text-white px-3 py-1.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 transition-colors shadow-sm"
                           onClick={createTaskFromEmail}
                         >
-                          <Plus size={14} /> Create Task
+                          <Plus size={14} /> <span className="hidden sm:inline">Create Task</span><span className="sm:hidden">Task</span>
                         </button>
                       ) : (
                         <button className="bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 cursor-default">
-                          <CheckCircle2 size={14} /> Task Linked: {selectedEmail.taskLinked}
+                          <CheckCircle2 size={14} /> <span className="hidden sm:inline">Task Linked</span>
                         </button>
                       )}
                     </>
                   )}
                   <button onClick={() => toast('Meeting scheduled successfully', 'success')} className="bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 hover:bg-gray-50 transition-colors">
-                    <Calendar size={14} /> Schedule Meeting
+                    <Calendar size={14} /> <span className="hidden sm:inline">Schedule Meeting</span><span className="sm:hidden">Meet</span>
                   </button>
                   <button onClick={() => openCompose('reply', selectedEmail)} className="bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 hover:bg-gray-50 transition-colors">
-                    <Reply size={14} /> Reply
+                    <Reply size={14} /> <span className="hidden sm:inline">Reply</span>
                   </button>
                   <button onClick={() => openCompose('forward', selectedEmail)} className="bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 hover:bg-gray-50 transition-colors">
-                    <Forward size={14} /> Forward
+                    <Forward size={14} /> <span className="hidden sm:inline">Forward</span>
                   </button>
                   <button onClick={() => document.getElementById('email-attachment-upload')?.click()} className="bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 hover:bg-gray-50 transition-colors">
-                    <Paperclip size={14} /> Attachments {selectedEmail.attachments.length > 0 && `(${selectedEmail.attachments.length})`}
+                    <Paperclip size={14} /> <span className="hidden sm:inline">Attachments</span> {selectedEmail.attachments.length > 0 && `(${selectedEmail.attachments.length})`}
                   </button>
                   <button onClick={() => toast('Email linked to client', 'success')} className="bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 hover:bg-gray-50 transition-colors">
-                    <LinkIcon size={14} /> Link to Client
+                    <LinkIcon size={14} /> <span className="hidden sm:inline">Link to Client</span><span className="sm:hidden">Link</span>
                   </button>
                 </div>
               </div>
@@ -533,18 +460,29 @@ ${stepsHtml}
                     <div className="flex items-center gap-2 text-[13px] font-bold text-[#d9534f] mb-2">
                       <Bot size={16} /> AI Summary & Suggested Reply
                     </div>
-                    <div className="text-[13px] text-gray-700 leading-relaxed mb-3">
-                      <strong>Summary:</strong> {getAITaskDetails(selectedEmail).overview}
-                    </div>
-                    <div className="bg-white border border-orange-100 rounded p-3 text-[13px] text-gray-600 italic">
-                      {getAIDraftReply(selectedEmail)}
-                    </div>
-                    <button 
-                      onClick={() => openCompose('reply', selectedEmail, getAIDraftReply(selectedEmail))}
-                      className="mt-3 text-[#d9534f] text-[13px] font-medium hover:underline flex items-center gap-1"
-                    >
-                      <Reply size={14} /> Use this draft to reply
-                    </button>
+                    {isSummarizing ? (
+                      <div className="flex items-center gap-2 text-[13px] text-gray-500 animate-pulse">
+                        <div className="w-4 h-4 rounded-full border-2 border-orange-400 border-t-transparent animate-spin" />
+                        Generating AI summary...
+                      </div>
+                    ) : emailSummary ? (
+                      <>
+                        <div className="text-[13px] text-gray-700 leading-relaxed mb-3">
+                          <strong>Summary:</strong> {emailSummary.overview}
+                        </div>
+                        <div className="bg-white border border-orange-100 rounded p-3 text-[13px] text-gray-600 italic">
+                          {emailSummary.suggestedReply}
+                        </div>
+                        <button 
+                          onClick={() => openCompose('reply', selectedEmail, emailSummary.suggestedReply)}
+                          className="mt-3 text-[#d9534f] text-[13px] font-medium hover:underline flex items-center gap-1"
+                        >
+                          <Reply size={14} /> Use this draft to reply
+                        </button>
+                      </>
+                    ) : (
+                      <div className="text-[13px] text-gray-500">Failed to generate summary.</div>
+                    )}
                   </div>
                 )}
               </div>
@@ -564,22 +502,22 @@ ${stepsHtml}
         <TaskModal
           task={{
             id: '',
-            title: getAITaskDetails(selectedEmail).title,
+            title: emailSummary?.title || `Follow up: ${selectedEmail.subject}`,
             clientId: selectedEmail.clientId || '',
             type: 'Other',
             status: 'To Do',
             priority: (selectedEmail.subject + " " + selectedEmail.body).toLowerCase().includes('urgent') ? 'High' : 'Medium',
-            assigneeId: 'u1',
+            assigneeId: currentUser?.id || 'u1',
             reviewerId: '',
             dueDate: fmt(today),
             createdAt: fmt(today),
             recurring: 'One-time',
-            description: generateTaskDescription(selectedEmail),
+            description: emailSummary ? `<p><strong>Task Overview:</strong> ${emailSummary.overview}</p><p><strong>Action Items:</strong></p><ul>${emailSummary.steps.map(s => `<li>${s}</li>`).join('')}</ul>` : selectedEmail.body,
             tags: ['email', 'ai-suggested'],
             subtasks: [],
             comments: [],
             attachments: selectedEmail.attachments.map((a, i) => ({ id: `att-${i}`, name: a, url: '#', type: a.endsWith('.pdf') ? 'pdf' : 'other', size: '1 MB' })),
-            activity: []
+            activity: [{ text: 'Task created from email', at: fmt(today) }]
           }}
           onClose={() => setIsTaskModalOpen(false)}
         />

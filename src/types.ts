@@ -6,6 +6,7 @@ export interface User {
   designation: string;
   color: string;
   active: boolean;
+  avatar?: string;
 }
 
 export interface Client {
@@ -82,6 +83,7 @@ export interface TaskTypeConfig {
   icon: string;
   color: string;
   description?: string;
+  workflowId?: string;
 }
 
 export interface WorkflowTransition {
@@ -175,6 +177,7 @@ export interface Document {
   uploadedBy: string;
   uploadedAt: string;
   description: string;
+  data?: string;
 }
 
 export interface Folder {

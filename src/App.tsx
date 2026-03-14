@@ -21,11 +21,19 @@ import { InboxPage } from './pages/InboxPage';
 import { SettingsPage } from './pages/SettingsPage';
 
 function AppContent() {
-  const { isAuthenticated } = useApp();
+  const { isAuthenticated, isLoading: isAuthLoading } = useApp();
   const [showSplash, setShowSplash] = useState(true);
 
   if (showSplash) {
     return <SplashPage onComplete={() => setShowSplash(false)} />;
+  }
+
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f4f5f7]">
+        <div className="w-10 h-10 border-4 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+      </div>
+    );
   }
 
   if (!isAuthenticated) {

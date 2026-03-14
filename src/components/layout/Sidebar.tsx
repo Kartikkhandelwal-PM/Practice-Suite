@@ -19,8 +19,7 @@ import {
 import { useApp } from '../../context/AppContext';
 
 export function Sidebar() {
-  const { users, sidebarCollapsed, setSidebarCollapsed } = useApp();
-  const currentUser = users[0]; // Assuming first user is logged in
+  const { users, sidebarCollapsed, setSidebarCollapsed, mobileMenuOpen, setMobileMenuOpen, currentUser } = useApp();
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/' },
@@ -38,8 +37,21 @@ export function Sidebar() {
   ];
 
   return (
-    <div className={`${sidebarCollapsed ? 'w-[72px]' : 'w-[248px]'} shrink-0 bg-[#0d1117] flex flex-col h-screen transition-all duration-300 relative z-[100] overflow-hidden`}>
-      <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'px-6'} h-[64px] border-b border-white/10 shrink-0 relative transition-all duration-300`}>
+    <>
+      {/* Mobile overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-[90] md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+      <div className={`
+        ${sidebarCollapsed ? 'w-[72px]' : 'w-[248px]'} 
+        shrink-0 bg-[#0d1117] flex flex-col h-screen transition-all duration-300 z-[100] overflow-hidden
+        fixed md:relative top-0 left-0 bottom-0
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}>
+        <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'px-6'} h-[64px] border-b border-white/10 shrink-0 relative transition-all duration-300`}>
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 shadow-lg shadow-black/20 overflow-hidden">
             <svg width="22" height="22" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
@@ -57,7 +69,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-3 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto py-3 scrollbar-hide">
         {!sidebarCollapsed && <div className="text-[9px] font-bold tracking-widest uppercase text-white/20 px-4 pt-2 pb-1 animate-in fade-in">Menu</div>}
         <div className="space-y-1">
           {navItems.map(item => (
@@ -65,6 +77,7 @@ export function Sidebar() {
               key={item.id}
               to={item.path}
               title={sidebarCollapsed ? item.label : ''}
+              onClick={() => setMobileMenuOpen(false)}
               className={({ isActive }) => 
                 `flex items-center gap-2.5 px-4 py-2 mx-2 rounded-lg text-[13px] font-medium transition-all relative ${
                   isActive ? 'bg-blue-600/25 text-white' : 'text-white/50 hover:bg-white/5 hover:text-white/85'
@@ -86,7 +99,7 @@ export function Sidebar() {
       <div className="p-3 border-t border-white/10 shrink-0 space-y-2">
         <button 
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className={`w-full h-9 rounded-lg flex items-center gap-2.5 text-white/50 hover:bg-white/5 hover:text-white transition-all ${sidebarCollapsed ? 'justify-center px-0' : 'px-3'}`}
+          className={`hidden md:flex w-full h-9 rounded-lg items-center gap-2.5 text-white/50 hover:bg-white/5 hover:text-white transition-all ${sidebarCollapsed ? 'justify-center px-0' : 'px-3'}`}
           title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
         >
           {sidebarCollapsed ? <ChevronRight size={18} /> : (
@@ -99,16 +112,17 @@ export function Sidebar() {
 
         <div className={`flex items-center gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-white/5 transition-colors ${sidebarCollapsed ? 'justify-center' : ''}`}>
           <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
-            {currentUser.name.split(' ').map(w => w[0]).join('')}
+            {currentUser?.name.split(' ').map(w => w[0]).join('') || '??'}
           </div>
           {!sidebarCollapsed && (
             <div className="min-w-0 animate-in fade-in">
-              <div className="text-[12.5px] font-semibold text-white truncate">{currentUser.name}</div>
-              <div className="text-[11px] text-white/40 truncate">{currentUser.role}</div>
+              <div className="text-[12.5px] font-semibold text-white truncate">{currentUser?.name}</div>
+              <div className="text-[11px] text-white/40 truncate">{currentUser?.role}</div>
             </div>
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

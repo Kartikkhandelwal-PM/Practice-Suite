@@ -9,7 +9,7 @@ import { Modal } from '../components/ui/Modal';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { Avatar } from '../components/ui/Avatar';
 import { Meeting } from '../types';
-import { genId, fmt, today, daysLeft, fmtDateShort } from '../utils';
+import { genUUID, fmt, today, daysLeft, fmtDateShort } from '../utils';
 
 const PLATFORMS = [
   { id: 'google_meet', label: 'Google Meet', color: '#4285f4', logo: 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Google_Meet_icon_%282020%29.svg' },
@@ -22,7 +22,7 @@ const PLATFORMS = [
 ];
 
 export function MeetingCalendarPage() {
-  const { meetings, setMeetings, clients, users } = useApp();
+  const { meetings, clients, users, currentUser, addMeeting, updateMeeting, deleteMeeting } = useApp();
   const toast = useToast();
   const { confirm } = useConfirm();
   const [view, setView] = useState<'calendar' | 'list' | 'upcoming'>('upcoming');
@@ -52,7 +52,7 @@ export function MeetingCalendarPage() {
 
   const openNew = (date?: Date) => {
     const d = date || today;
-    setForm({ id: genId(), title: '', clientId: '', type: 'Video Call', platform: 'google_meet', meetLink: '', date: fmt(d), time: '10:00', duration: 60, attendees: ['u1'], description: '', notes: '', status: 'scheduled' });
+    setForm({ id: genUUID(), title: '', clientId: '', type: 'Video Call', platform: 'google_meet', meetLink: '', date: fmt(d), time: '10:00', duration: 60, attendees: [currentUser?.id || 'u1'], description: '', notes: '', status: 'scheduled' });
     setIsModalOpen(true);
   };
   
@@ -61,22 +61,32 @@ export function MeetingCalendarPage() {
     setIsModalOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form?.title || !form?.date || !form?.time) { toast('Title, date and time are required', 'error'); return; }
-    if (meetings.find(m => m.id === form.id)) {
-      setMeetings(m => m.map(x => x.id === form.id ? form : x));
-    } else {
-      setMeetings(m => [...m, form]);
+    try {
+      if (meetings.find(m => m.id === form.id)) {
+        await updateMeeting(form.id, form);
+      } else {
+        await addMeeting(form);
+      }
+      toast(form.id && meetings.find(m => m.id === form.id) ? 'Meeting updated' : 'Meeting scheduled', 'success');
+      setIsModalOpen(false);
+      setForm(null);
+    } catch (error) {
+      console.error('Error saving meeting:', error);
+      toast('Failed to save meeting', 'error');
     }
-    toast(form.id && meetings.find(m => m.id === form.id) ? 'Meeting updated' : 'Meeting scheduled', 'success');
-    setIsModalOpen(false);
-    setForm(null);
   };
 
   const delMeeting = async (id: string) => {
     if (await confirm({ title: 'Delete Meeting', message: 'Are you sure you want to delete this meeting?', danger: true })) {
-      setMeetings(m => m.filter(x => x.id !== id));
-      toast('Meeting deleted');
+      try {
+        await deleteMeeting(id);
+        toast('Meeting deleted');
+      } catch (error) {
+        console.error('Error deleting meeting:', error);
+        toast('Failed to delete meeting', 'error');
+      }
     }
   };
 
@@ -99,26 +109,26 @@ export function MeetingCalendarPage() {
         }
       />
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex bg-gray-100/50 p-1 rounded-xl border border-gray-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3 overflow-x-auto pb-2 sm:pb-0 no-scrollbar">
+          <div className="flex bg-gray-100/50 p-1 rounded-xl border border-gray-200 shrink-0">
             <button 
               onClick={() => setView('upcoming')}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${view === 'upcoming' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${view === 'upcoming' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              <Clock size={16} /> Upcoming
+              <Clock size={16} /> <span className="hidden xs:inline">Upcoming</span>
             </button>
             <button 
               onClick={() => setView('list')}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${view === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${view === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              <List size={16} /> List View
+              <List size={16} /> <span className="hidden xs:inline">List</span>
             </button>
             <button 
               onClick={() => setView('calendar')}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${view === 'calendar' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${view === 'calendar' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              <CalendarIcon size={16} /> Calendar
+              <CalendarIcon size={16} /> <span className="hidden xs:inline">Calendar</span>
             </button>
           </div>
         </div>
@@ -129,9 +139,9 @@ export function MeetingCalendarPage() {
         <div className="w-full">
           {view === 'calendar' ? (
             <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-              <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                <div className="flex items-center gap-4">
-                  <h2 className="text-xl font-bold text-gray-900">
+              <div className="p-4 sm:p-6 border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-gray-50/50 gap-4">
+                <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-start">
+                  <h2 className="text-lg sm:text-xl font-bold text-gray-900">
                     {MONTHS[currentMonth.getMonth()]} {currentMonth.getFullYear()}
                   </h2>
                   <div className="flex items-center gap-1">
@@ -139,99 +149,103 @@ export function MeetingCalendarPage() {
                     <button onClick={() => setCurrentMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))} className="p-2 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-gray-200"><ChevronRight size={20} /></button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                   <div className="relative">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                   <div className="relative flex-1 sm:flex-none">
                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                      <input 
                        placeholder="Search meetings..." 
-                       className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-[13px] outline-none focus:border-blue-600 w-64 transition-all"
+                       className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-[13px] outline-none focus:border-blue-600 w-full sm:w-64 transition-all"
                        value={search}
                        onChange={e => setSearch(e.target.value)}
                      />
                    </div>
                 </div>
               </div>
-              <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50/30">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                  <div key={d} className="py-3 text-center text-[11px] font-bold text-gray-400 uppercase tracking-widest">{d}</div>
-                ))}
-              </div>
-              <div className="grid grid-cols-7 bg-gray-200 gap-[1px]">
-                {calDays.map((d, i) => {
-                  if (!d) return <div key={`empty-${i}`} className="bg-gray-50 min-h-[160px]"></div>;
-                  const ds = fmt(d);
-                  const dm = getMeetingsForDate(d);
-                  const isToday = fmt(today) === ds;
-                  const isSel = selectedDate === ds;
-                  
-                  return (
-                    <div 
-                      key={ds} 
-                      className={`bg-white min-h-[160px] p-2 cursor-pointer transition-colors relative group ${isToday ? 'bg-blue-50/30' : 'hover:bg-gray-50'} ${isSel ? 'ring-2 ring-inset ring-blue-500 z-10' : ''}`}
-                      onClick={() => setSelectedDate(ds === selectedDate ? null : ds)}
-                    >
-                      <div className={`text-[13px] font-bold w-7 h-7 flex items-center justify-center rounded-lg mb-2 ${isToday ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-700'}`}>
-                        {d.getDate()}
-                      </div>
-                      <div className="space-y-1.5 overflow-y-auto max-h-[110px] custom-scrollbar">
-                        {dm.map(m => {
-                          const pl = PLATFORMS.find(p => p.id === m.platform);
-                          return (
-                            <button 
-                              key={m.id}
-                              onClick={(e) => { e.stopPropagation(); openEdit(m); }}
-                              className="w-full text-left px-2 py-2 rounded-lg text-[11px] font-bold transition-all truncate bg-white border border-gray-100 hover:border-blue-300 hover:shadow-md flex items-center gap-2 group/item"
-                              style={{ borderLeft: `4px solid ${pl?.color || '#2563eb'}` }}
-                            >
-                              <div className="w-4 h-4 flex items-center justify-center shrink-0">
-                                {pl?.logo ? (
-                                  <img 
-                                    src={pl.logo} 
-                                    alt="" 
-                                    className="w-full h-full object-contain" 
-                                    referrerPolicy="no-referrer"
-                                    onError={(e) => {
-                                      (e.target as HTMLImageElement).style.display = 'none';
-                                      (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-blue-50 text-blue-600 rounded text-[8px] font-bold">' + pl.label.charAt(0) + '</div>';
-                                    }}
-                                  />
-                                ) : (
-                                  <Video size={12} className="text-gray-400" />
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="truncate text-gray-900">{m.title}</div>
-                                <div className="text-[9px] text-gray-400 font-medium">{m.time}</div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <button 
-                        className="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md active:scale-90"
-                        onClick={(e) => { e.stopPropagation(); openNew(d); }}
-                      >
-                        <Plus size={16} />
-                      </button>
-                    </div>
-                  );
-                })}
+              <div className="overflow-x-auto">
+                <div className="min-w-[700px]">
+                  <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50/30">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                      <div key={d} className="py-3 text-center text-[11px] font-bold text-gray-400 uppercase tracking-widest">{d}</div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 bg-gray-200 gap-[1px]">
+                    {calDays.map((d, i) => {
+                      if (!d) return <div key={`empty-${i}`} className="bg-gray-50 min-h-[120px] sm:min-h-[160px]"></div>;
+                      const ds = fmt(d);
+                      const dm = getMeetingsForDate(d);
+                      const isToday = fmt(today) === ds;
+                      const isSel = selectedDate === ds;
+                      
+                      return (
+                        <div 
+                          key={ds} 
+                          className={`bg-white min-h-[120px] sm:min-h-[160px] p-2 cursor-pointer transition-colors relative group ${isToday ? 'bg-blue-50/30' : 'hover:bg-gray-50'} ${isSel ? 'ring-2 ring-inset ring-blue-500 z-10' : ''}`}
+                          onClick={() => setSelectedDate(ds === selectedDate ? null : ds)}
+                        >
+                          <div className={`text-[12px] sm:text-[13px] font-bold w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg mb-2 ${isToday ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-700'}`}>
+                            {d.getDate()}
+                          </div>
+                          <div className="space-y-1.5 overflow-y-auto max-h-[80px] sm:max-h-[110px] custom-scrollbar">
+                            {dm.map(m => {
+                              const pl = PLATFORMS.find(p => p.id === m.platform);
+                              return (
+                                <button 
+                                  key={m.id}
+                                  onClick={(e) => { e.stopPropagation(); openEdit(m); }}
+                                  className="w-full text-left px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all truncate bg-white border border-gray-100 hover:border-blue-300 hover:shadow-md flex items-center gap-2 group/item"
+                                  style={{ borderLeft: `3px sm:border-left-4 solid ${pl?.color || '#2563eb'}` }}
+                                >
+                                  <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center shrink-0">
+                                    {pl?.logo ? (
+                                      <img 
+                                        src={pl.logo} 
+                                        alt="" 
+                                        className="w-full h-full object-contain" 
+                                        referrerPolicy="no-referrer"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).style.display = 'none';
+                                          (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-blue-50 text-blue-600 rounded text-[8px] font-bold">' + pl.label.charAt(0) + '</div>';
+                                        }}
+                                      />
+                                    ) : (
+                                      <Video size={12} className="text-gray-400" />
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="truncate text-gray-900">{m.title}</div>
+                                    <div className="text-[8px] sm:text-[9px] text-gray-400 font-medium">{m.time}</div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <button 
+                            className="absolute bottom-2 right-2 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-blue-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md active:scale-90"
+                            onClick={(e) => { e.stopPropagation(); openNew(d); }}
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           ) : view === 'list' ? (
             <div className="space-y-6">
-              <div className="bg-white border border-gray-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
-                <div className="flex items-center gap-4">
-                  <div className="relative">
+              <div className="bg-white border border-gray-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-sm gap-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
+                  <div className="relative w-full sm:w-80">
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input 
                       placeholder="Search meetings, clients..." 
-                      className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-600 w-80 transition-all"
+                      className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-600 w-full transition-all"
                       value={search}
                       onChange={e => setSearch(e.target.value)}
                     />
                   </div>
-                  <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition-all">
+                  <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition-all w-full sm:w-auto justify-center">
                     <Filter size={16} /> Filters
                   </button>
                 </div>
@@ -339,9 +353,9 @@ export function MeetingCalendarPage() {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-2 space-y-6">
-                <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-6">
+                <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm">
                   <h3 className="text-[16px] font-bold text-gray-900 mb-4 flex items-center gap-2">
                     <Clock size={20} className="text-blue-600" />
                     Upcoming Today
@@ -351,8 +365,8 @@ export function MeetingCalendarPage() {
                       meetings.filter(m => m.date === fmt(today)).map(m => {
                         const pl = PLATFORMS.find(p => p.id === m.platform);
                         return (
-                          <div key={m.id} className="flex gap-4 p-4 rounded-xl border border-gray-100 hover:bg-gray-50 transition-all cursor-pointer group bg-white shadow-sm" onClick={() => openEdit(m)}>
-                            <div className="w-1.5 rounded-full group-hover:w-2 transition-all" style={{ backgroundColor: pl?.color || '#3b82f6' }} />
+                          <div key={m.id} className="flex flex-col sm:flex-row gap-4 p-4 rounded-xl border border-gray-100 hover:bg-gray-50 transition-all cursor-pointer group bg-white shadow-sm" onClick={() => openEdit(m)}>
+                            <div className="hidden sm:block w-1.5 rounded-full group-hover:w-2 transition-all" style={{ backgroundColor: pl?.color || '#3b82f6' }} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
                                 {pl?.logo ? (
@@ -376,7 +390,7 @@ export function MeetingCalendarPage() {
                                 <Clock size={14} /> {m.time} • {m.duration} mins
                               </div>
                             </div>
-                            <div className="flex flex-col items-end justify-between">
+                            <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2">
                               <div className="flex -space-x-2">
                                 {m.attendees.map(uid => (
                                   <Avatar key={uid} user={users.find(u => u.id === uid)} size={28} className="border-2 border-white shadow-sm" />
@@ -412,7 +426,7 @@ export function MeetingCalendarPage() {
                   </div>
                 </div>
 
-                <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm">
                   <h3 className="text-[16px] font-bold text-gray-900 mb-4 flex items-center gap-2">
                     <CalendarIcon size={20} className="text-purple-600" />
                     Next 7 Days
@@ -421,8 +435,8 @@ export function MeetingCalendarPage() {
                     {upcoming.filter(m => m.date !== fmt(today)).slice(0, 5).map(m => {
                       const pl = PLATFORMS.find(p => p.id === m.platform);
                       return (
-                        <div key={m.id} className="flex gap-4 p-4 rounded-xl border border-gray-100 hover:bg-gray-50 transition-all cursor-pointer group bg-white shadow-sm" onClick={() => openEdit(m)}>
-                          <div className="w-1.5 rounded-full group-hover:w-2 transition-all" style={{ backgroundColor: pl?.color || '#8b5cf6' }} />
+                        <div key={m.id} className="flex flex-col sm:flex-row gap-4 p-4 rounded-xl border border-gray-100 hover:bg-gray-50 transition-all cursor-pointer group bg-white shadow-sm" onClick={() => openEdit(m)}>
+                          <div className="hidden sm:block w-1.5 rounded-full group-hover:w-2 transition-all" style={{ backgroundColor: pl?.color || '#8b5cf6' }} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               {pl?.logo ? (

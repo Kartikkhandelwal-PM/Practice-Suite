@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { daysLeft, STATUS_COLORS, PRIORITY_COLORS } from '../utils';
+import { daysLeft, STATUS_COLORS, PRIORITY_COLORS, canTransition } from '../utils';
 import { Plus, Search, ChevronDown, ChevronUp, Check, Trash2, Maximize2, ListTodo, GitMerge, Filter, Calendar, X, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TypeChip, StatusBadge, PriorityBadge } from '../components/ui/Badges';
@@ -15,7 +15,7 @@ import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../components/ui/PageHeader';
 
 export function TasksPage() {
-  const { tasks, setTasks, clients, users, taskTypes } = useApp();
+  const { tasks, clients, users, taskTypes, workflows, currentUser, updateTask: persistUpdateTask, deleteTask: persistDeleteTask } = useApp();
   const toast = useToast();
   const { confirm } = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -74,14 +74,47 @@ export function TasksPage() {
     setIsModalOpen(true);
   };
 
-  const updateTask = (id: string, updates: Partial<Task>) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, ...updates } : t));
-    toast('Task updated', 'success');
+  const updateTask = async (id: string, updates: Partial<Task>) => {
+    if (updates.status) {
+      const task = tasks.find(t => t.id === id);
+      if (task) {
+        const check = canTransition(task, updates.status, taskTypes, workflows);
+        if (!check.allowed) {
+          toast(check.reason || 'Invalid transition', 'error');
+          return;
+        }
+      }
+    }
+    try {
+      await persistUpdateTask(id, updates);
+      toast('Task updated', 'success');
+    } catch (error) {
+      console.error('Error updating task:', error);
+      toast('Failed to update task', 'error');
+    }
+  };
+
+  const deleteTask = async (id: string) => {
+    if (await confirm({ title: 'Delete Task', message: 'Are you sure you want to delete this task?', danger: true })) {
+      try {
+        await persistDeleteTask(id);
+        toast('Task deleted', 'success');
+      } catch (error) {
+        console.error('Error deleting task:', error);
+        toast('Failed to delete task', 'error');
+      }
+    }
   };
 
   const filtered = useMemo(() => {
     let t = tasks;
-    if (tab === 'mine') t = t.filter(x => x.assigneeId === 'u1'); // Assuming u1 is current user
+    
+    // Non-admins only see tasks they are involved in
+    if (currentUser?.role !== 'admin') {
+      t = t.filter(x => x.assigneeId === currentUser?.id || x.reviewerId === currentUser?.id);
+    }
+
+    if (tab === 'mine') t = t.filter(x => x.assigneeId === currentUser?.id);
     if (tab === 'overdue') t = t.filter(x => x.status !== 'Completed' && (daysLeft(x.dueDate) ?? 0) < 0);
     if (tab === 'due-soon') t = t.filter(x => x.status !== 'Completed' && (daysLeft(x.dueDate) ?? -1) >= 0 && (daysLeft(x.dueDate) ?? 8) <= 7);
     if (tab === 'recurring') t = t.filter(x => x.recurring && x.recurring !== 'One-time');
@@ -120,17 +153,45 @@ export function TasksPage() {
   const selectAll = () => setSelected(filtered.map(t => t.id));
   const clearSelect = () => setSelected([]);
   
-  const bulkComplete = () => {
-    setTasks(tasks.map(t => selected.includes(t.id) ? { ...t, status: 'Completed' } : t));
-    clearSelect();
-    toast(`${selected.length} tasks marked complete`, 'success');
+  const bulkComplete = async () => {
+    let successCount = 0;
+    let failCount = 0;
+    
+    const toUpdate = tasks.filter(t => selected.includes(t.id));
+    
+    try {
+      await Promise.all(toUpdate.map(async (t) => {
+        const check = canTransition(t, 'Completed', taskTypes, workflows);
+        if (check.allowed) {
+          await persistUpdateTask(t.id, { status: 'Completed' });
+          successCount++;
+        } else {
+          failCount++;
+        }
+      }));
+      
+      clearSelect();
+      if (failCount > 0) {
+        toast(`${successCount} tasks completed. ${failCount} tasks could not be completed due to workflow rules.`, 'warning');
+      } else {
+        toast(`${successCount} tasks marked complete`, 'success');
+      }
+    } catch (error) {
+      console.error('Error bulk completing tasks:', error);
+      toast('Failed to complete some tasks', 'error');
+    }
   };
   
   const bulkDelete = async () => {
     if (await confirm({ title: 'Delete Tasks', message: `Are you sure you want to delete ${selected.length} tasks?`, danger: true })) {
-      setTasks(tasks.filter(t => !selected.includes(t.id)));
-      clearSelect();
-      toast('Tasks deleted');
+      try {
+        await Promise.all(selected.map(id => persistDeleteTask(id)));
+        clearSelect();
+        toast('Tasks deleted', 'success');
+      } catch (error) {
+        console.error('Error bulk deleting tasks:', error);
+        toast('Failed to delete some tasks', 'error');
+      }
     }
   };
 
@@ -305,303 +366,451 @@ export function TasksPage() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm"
+        className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
       >
-        <table className="w-full border-collapse text-left">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="px-3.5 py-2.5 w-10">
-                <input 
-                  type="checkbox" 
-                  className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                  onChange={e => e.target.checked ? selectAll() : clearSelect()} 
-                  checked={selected.length === filtered.length && filtered.length > 0} 
-                />
-              </th>
-              <SH col="id" label="ID" />
-              <SH col="title" label="Task" />
-              <SH col="parentId" label="Parent" />
-              <SH col="clientId" label="Client" />
-              <SH col="type" label="Type" />
-              <SH col="status" label="Status" />
-              <SH col="priority" label="Priority" />
-              <SH col="assigneeId" label="Assignee" />
-              <SH col="dueDate" label="Due Date" />
-              <th className="px-3.5 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="text-[13px] text-gray-700">
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={10}>
-                  <div className="flex flex-col items-center justify-center p-12 text-gray-500 gap-3">
-                    <ListTodo size={32} className="opacity-30" />
-                    <div className="text-center">
-                      <h3 className="font-semibold text-gray-700 text-[15px]">No tasks found</h3>
-                      <p className="text-[13px] mt-1">Try adjusting filters or create a new task.</p>
-                    </div>
-                  </div>
-                </td>
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-3.5 py-2.5 w-10">
+                  <input 
+                    type="checkbox" 
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    onChange={e => e.target.checked ? selectAll() : clearSelect()} 
+                    checked={selected.length === filtered.length && filtered.length > 0} 
+                  />
+                </th>
+                <SH col="id" label="ID" />
+                <SH col="title" label="Task" />
+                <SH col="parentId" label="Parent" />
+                <SH col="clientId" label="Client" />
+                <SH col="type" label="Type" />
+                <SH col="status" label="Status" />
+                <SH col="priority" label="Priority" />
+                <SH col="assigneeId" label="Assignee" />
+                <SH col="dueDate" label="Due Date" />
+                <th className="px-3.5 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
-            )}
-            {paginatedTasks.map(t => {
-              const c = clients.find(x => x.id === t.clientId);
-              const a = users.find(x => x.id === t.assigneeId);
-              const dl = daysLeft(t.dueDate);
-              const isSelected = selected.includes(t.id);
-              const taskType = taskTypes.find(type => type.name === (t.issueType || 'Task'));
-              const childTasks = tasks.filter(x => x.parentId === t.id);
-              const parentTask = t.parentId ? tasks.find(x => x.id === t.parentId) : null;
-              
-              let dueClass = "text-gray-500";
-              let rowClass = "";
-              if (dl !== null) {
-                if (dl < 0) {
-                  dueClass = "text-red-600 font-bold";
-                  rowClass = "bg-red-50/30";
-                } else if (dl <= 2) {
-                  dueClass = "text-orange-600 font-bold";
-                  rowClass = "bg-orange-50/30";
-                } else {
-                  dueClass = "text-gray-400";
+            </thead>
+            <tbody className="text-[13px] text-gray-700">
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={11}>
+                    <div className="flex flex-col items-center justify-center p-12 text-gray-500 gap-3">
+                      <ListTodo size={32} className="opacity-30" />
+                      <div className="text-center">
+                        <h3 className="font-semibold text-gray-700 text-[15px]">No tasks found</h3>
+                        <p className="text-[13px] mt-1">Try adjusting filters or create a new task.</p>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {paginatedTasks.map(t => {
+                const c = clients.find(x => x.id === t.clientId);
+                const a = users.find(x => x.id === t.assigneeId);
+                const dl = daysLeft(t.dueDate);
+                const isSelected = selected.includes(t.id);
+                const taskType = taskTypes.find(type => type.name === (t.issueType || 'Task'));
+                const childTasks = tasks.filter(x => x.parentId === t.id);
+                const parentTask = t.parentId ? tasks.find(x => x.id === t.parentId) : null;
+                
+                let dueClass = "text-gray-500";
+                let rowClass = "";
+                if (dl !== null) {
+                  if (dl < 0) {
+                    dueClass = "text-red-600 font-bold";
+                    rowClass = "bg-red-50/30";
+                  } else if (dl <= 2) {
+                    dueClass = "text-orange-600 font-bold";
+                    rowClass = "bg-orange-50/30";
+                  } else {
+                    dueClass = "text-gray-400";
+                  }
                 }
-              }
-              
-              return (
-                <React.Fragment key={t.id}>
-                  <tr className={`border-b border-gray-100 transition-colors ${isSelected ? 'bg-blue-50/30' : rowClass ? `${rowClass} hover:opacity-80` : 'hover:bg-gray-50'}`}>
-                    <td className="px-3.5 py-2.5">
-                      <input 
-                        type="checkbox" 
-                        className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        checked={isSelected} 
-                        onChange={() => toggleSelect(t.id)} 
-                      />
-                    </td>
-                    <td className="px-3.5 py-2.5">
-                      <div className="flex items-center gap-1.5" title={taskType?.name}>
-                        {taskType && (
-                          <div className="w-4 h-4 rounded flex items-center justify-center text-white" style={{ backgroundColor: taskType.color }}>
-                            <IconRenderer name={taskType.icon} size={10} />
-                          </div>
-                        )}
-                        <span className="text-[11px] font-mono text-gray-400">#{t.id}</span>
-                      </div>
-                    </td>
-                    <td className="px-3.5 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="font-medium text-blue-600 hover:underline cursor-pointer" onClick={() => openEditTask(t)}>{t.title}</div>
-                        {childTasks.length > 0 && (
-                          <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded" title={`${childTasks.filter(s => s.status === 'Completed').length}/${childTasks.length} subtasks done`}>
-                            <GitMerge size={10} />
-                            <span>{childTasks.filter(s => s.status === 'Completed').length}/{childTasks.length}</span>
-                          </div>
-                        )}
-                      </div>
-                      {t.tags && t.tags.length > 0 && (
-                        <div className="flex gap-1 mt-1 flex-wrap">
-                          {t.tags.map(g => <span key={g} className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[10px] font-semibold">{g}</span>)}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-3.5 py-2.5">
-                      {parentTask ? (
-                        <div className="flex items-center gap-1 text-[11px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded w-fit" title={`Parent: ${parentTask.title}`}>
-                          ↑ #{parentTask.id}
-                        </div>
-                      ) : (
-                        <span className="text-gray-400 text-[12px]">—</span>
-                      )}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-[12px] text-gray-500">{c?.name || '—'}</td>
-                    <td className="px-3.5 py-2.5"><TypeChip type={t.type} /></td>
-                    <td className="px-3.5 py-2.5">
-                      <select 
-                        className="bg-transparent border-none outline-none text-[12px] font-medium cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 -ml-1"
-                        value={t.status}
-                        onChange={e => updateTask(t.id, { status: e.target.value })}
-                      >
-                        {Object.keys(STATUS_COLORS).map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </td>
-                    <td className="px-3.5 py-2.5">
-                      <select 
-                        className="bg-transparent border-none outline-none text-[12px] font-medium cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 -ml-1"
-                        value={t.priority}
-                        onChange={e => updateTask(t.id, { priority: e.target.value })}
-                      >
-                        {Object.keys(PRIORITY_COLORS).map(p => <option key={p} value={p}>{p}</option>)}
-                      </select>
-                    </td>
-                    <td className="px-3.5 py-2.5">
-                      <div className="flex items-center gap-1.5 relative group">
-                        <Avatar user={a} size={22} />
-                        <select 
-                          className="absolute inset-0 opacity-0 cursor-pointer"
-                          value={t.assigneeId}
-                          onChange={e => updateTask(t.id, { assigneeId: e.target.value })}
-                          title="Change Assignee"
-                        >
-                          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                        </select>
-                        <span className="text-[12px] group-hover:text-blue-600 transition-colors">{a?.name?.split(' ')[0] || '—'}</span>
-                      </div>
-                    </td>
-                    <td className="px-3.5 py-2.5">
-                      <div className="flex items-center gap-2">
+                
+                return (
+                  <React.Fragment key={t.id}>
+                    <tr className={`border-b border-gray-100 transition-colors ${isSelected ? 'bg-blue-50/30' : rowClass ? `${rowClass} hover:opacity-80` : 'hover:bg-gray-50'}`}>
+                      <td className="px-3.5 py-2.5">
                         <input 
-                          type="date" 
-                          className={`bg-transparent border-none outline-none text-[12px] cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 -ml-1 w-[110px] ${dl !== null && dl < 0 ? 'text-red-600 font-medium' : 'text-gray-600'}`}
-                          value={t.dueDate}
-                          onChange={e => updateTask(t.id, { dueDate: e.target.value })}
+                          type="checkbox" 
+                          className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          checked={isSelected} 
+                          onChange={() => toggleSelect(t.id)} 
                         />
-                        {dl !== null && (
-                          <span className={`text-[10px] font-semibold ${dueClass}`}>
-                            {dl < 0 ? `${Math.abs(dl)}d late` : dl === 0 ? 'Today' : `${dl}d`}
-                          </span>
+                      </td>
+                      <td className="px-3.5 py-2.5">
+                        <div className="flex items-center gap-1.5" title={taskType?.name}>
+                          {taskType && (
+                            <div className="w-4 h-4 rounded flex items-center justify-center text-white" style={{ backgroundColor: taskType.color }}>
+                              <IconRenderer name={taskType.icon} size={10} />
+                            </div>
+                          )}
+                          <span className="text-[11px] font-mono text-gray-400">#{t.id}</span>
+                        </div>
+                      </td>
+                      <td className="px-3.5 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className="font-medium text-blue-600 hover:underline cursor-pointer" onClick={() => openEditTask(t)}>{t.title}</div>
+                          {childTasks.length > 0 && (
+                            <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded" title={`${childTasks.filter(s => s.status === 'Completed').length}/${childTasks.length} subtasks done`}>
+                              <GitMerge size={10} />
+                              <span>{childTasks.filter(s => s.status === 'Completed').length}/{childTasks.length}</span>
+                            </div>
+                          )}
+                        </div>
+                        {t.tags && t.tags.length > 0 && (
+                          <div className="flex gap-1 mt-1 flex-wrap">
+                            {t.tags.map(g => <span key={g} className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[10px] font-semibold">{g}</span>)}
+                          </div>
                         )}
-                      </div>
-                    </td>
-                    <td className="px-3.5 py-2.5">
-                      <div className="flex items-center gap-1">
-                        <button className="w-[26px] h-[26px] rounded flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-gray-900 transition-colors" onClick={() => openEditTask(t)}>
-                          <Maximize2 size={13} />
-                        </button>
-                        <button className="w-[26px] h-[26px] rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={async () => {
-                          if (await confirm({ title: 'Delete Task', message: 'Are you sure you want to delete this task?', danger: true })) {
-                            setTasks(tasks.filter(x => x.id !== t.id));
-                            toast('Task deleted');
-                          }
-                        }}>
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {showSubtasks && childTasks.length > 0 && childTasks.map((s) => {
-                    const sc = clients.find(x => x.id === s.clientId);
-                    const sa = users.find(x => x.id === s.assigneeId);
-                    const sdl = daysLeft(s.dueDate);
-                    const sIsSelected = selected.includes(s.id);
-                    const sTaskType = taskTypes.find(type => type.name === (s.issueType || 'Subtask'));
-                    
-                    let sDueClass = "text-gray-500";
-                    let sRowClass = "";
-                    if (sdl !== null) {
-                      if (sdl < 0) {
-                        sDueClass = "text-red-600 font-bold";
-                        sRowClass = "bg-red-50/20";
-                      } else if (sdl <= 2) {
-                        sDueClass = "text-orange-600 font-bold";
-                        sRowClass = "bg-orange-50/20";
-                      } else {
-                        sDueClass = "text-gray-400";
-                      }
-                    }
-
-                    return (
-                      <tr key={s.id} className={`border-b border-gray-100 transition-colors ${sIsSelected ? 'bg-blue-50/30' : sRowClass ? `${sRowClass} hover:opacity-80` : 'bg-gray-50/30 hover:bg-gray-50'}`}>
-                        <td className="px-3.5 py-2.5 pl-8 text-center">
-                          <div className="w-1.5 h-1.5 rounded-full bg-gray-300 inline-block mr-2" />
+                      </td>
+                      <td className="px-3.5 py-2.5">
+                        {parentTask ? (
+                          <div className="flex items-center gap-1 text-[11px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded w-fit" title={`Parent: ${parentTask.title}`}>
+                            ↑ #{parentTask.id}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-[12px]">—</span>
+                        )}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-[12px] text-gray-500">{c?.name || '—'}</td>
+                      <td className="px-3.5 py-2.5"><TypeChip type={t.type} /></td>
+                      <td className="px-3.5 py-2.5">
+                        <select 
+                          className="bg-transparent border-none outline-none text-[12px] font-medium cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 -ml-1"
+                          value={t.status}
+                          onChange={e => updateTask(t.id, { status: e.target.value })}
+                        >
+                          {(() => {
+                            const currentTaskType = taskTypes.find(type => type.name === (t.issueType || 'Task'));
+                            const currentWorkflow = currentTaskType?.workflowId ? workflows.find(w => w.id === currentTaskType.workflowId) : null;
+                            
+                            let options = Array.from(new Set(workflows.flatMap(w => w.statuses)));
+                            if (currentWorkflow) {
+                              options = currentWorkflow.statuses.filter(opt => {
+                                if (opt === t.status) return true;
+                                const transition = currentWorkflow.transitions.find(tr => tr.from === t.status);
+                                return transition ? transition.to.includes(opt) : false;
+                              });
+                            }
+                            if (!options.includes(t.status)) {
+                              options.push(t.status);
+                            }
+                            return options.map(s => <option key={s} value={s}>{s}</option>);
+                          })()}
+                        </select>
+                      </td>
+                      <td className="px-3.5 py-2.5">
+                        <select 
+                          className="bg-transparent border-none outline-none text-[12px] font-medium cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 -ml-1"
+                          value={t.priority}
+                          onChange={e => updateTask(t.id, { priority: e.target.value })}
+                        >
+                          {Object.keys(PRIORITY_COLORS).map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-3.5 py-2.5">
+                        <div className="flex items-center gap-1.5 relative group">
+                          <Avatar user={a} size={22} />
+                          <select 
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            value={t.assigneeId}
+                            onChange={e => updateTask(t.id, { assigneeId: e.target.value })}
+                            title="Change Assignee"
+                          >
+                            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                          </select>
+                          <span className="text-[12px] group-hover:text-blue-600 transition-colors">{a?.name?.split(' ')[0] || '—'}</span>
+                        </div>
+                      </td>
+                      <td className="px-3.5 py-2.5">
+                        <div className="flex items-center gap-2">
                           <input 
-                            type="checkbox" 
-                            className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                            checked={sIsSelected} 
-                            onChange={() => toggleSelect(s.id)} 
+                            type="date" 
+                            className={`bg-transparent border-none outline-none text-[12px] cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 -ml-1 w-[110px] ${dl !== null && dl < 0 ? 'text-red-600 font-medium' : 'text-gray-600'}`}
+                            value={t.dueDate}
+                            onChange={e => updateTask(t.id, { dueDate: e.target.value })}
                           />
-                        </td>
-                        <td className="px-3.5 py-2.5">
-                          <div className="flex items-center gap-1.5" title={sTaskType?.name}>
-                            {sTaskType && (
-                              <div className="w-4 h-4 rounded flex items-center justify-center text-white" style={{ backgroundColor: sTaskType.color }}>
-                                <IconRenderer name={sTaskType.icon} size={10} />
-                              </div>
-                            )}
-                            <span className="text-[11px] font-mono text-gray-400">#{s.id}</span>
-                          </div>
-                        </td>
-                        <td className="px-3.5 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <div className={`font-medium cursor-pointer hover:underline ${s.status === 'Completed' ? 'line-through text-gray-400' : 'text-gray-700'}`} onClick={() => openEditTask(s)}>{s.title}</div>
-                          </div>
-                        </td>
-                        <td className="px-3.5 py-2.5">
-                          <div className="flex items-center gap-1 text-[11px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded w-fit" title={`Parent: ${t.title}`}>
-                            ↑ #{t.id}
-                          </div>
-                        </td>
-                        <td className="px-3.5 py-2.5 text-[12px] text-gray-500">{sc?.name || '—'}</td>
-                        <td className="px-3.5 py-2.5"><TypeChip type={s.type} /></td>
-                        <td className="px-3.5 py-2.5">
-                          <select 
-                            className="bg-transparent border-none outline-none text-[12px] font-medium cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 -ml-1"
-                            value={s.status}
-                            onChange={e => updateTask(s.id, { status: e.target.value })}
-                          >
-                            {Object.keys(STATUS_COLORS).map(st => <option key={st} value={st}>{st}</option>)}
-                          </select>
-                        </td>
-                        <td className="px-3.5 py-2.5">
-                          <select 
-                            className="bg-transparent border-none outline-none text-[12px] font-medium cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 -ml-1"
-                            value={s.priority}
-                            onChange={e => updateTask(s.id, { priority: e.target.value })}
-                          >
-                            {Object.keys(PRIORITY_COLORS).map(p => <option key={p} value={p}>{p}</option>)}
-                          </select>
-                        </td>
-                        <td className="px-3.5 py-2.5">
-                          <div className="flex items-center gap-1.5 relative group">
-                            <Avatar user={sa} size={22} />
-                            <select 
-                              className="absolute inset-0 opacity-0 cursor-pointer"
-                              value={s.assigneeId}
-                              onChange={e => updateTask(s.id, { assigneeId: e.target.value })}
-                              title="Change Assignee"
-                            >
-                              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                            </select>
-                            <span className="text-[12px] group-hover:text-blue-600 transition-colors">{sa?.name?.split(' ')[0] || '—'}</span>
-                          </div>
-                        </td>
-                        <td className="px-3.5 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <input 
-                              type="date" 
-                              className={`bg-transparent border-none outline-none text-[12px] cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 -ml-1 w-[110px] ${sdl !== null && sdl < 0 ? 'text-red-600 font-medium' : 'text-gray-600'}`}
-                              value={s.dueDate}
-                              onChange={e => updateTask(s.id, { dueDate: e.target.value })}
-                            />
-                            {sdl !== null && (
-                              <span className={`text-[10px] font-semibold ${sDueClass}`}>
-                                {sdl < 0 ? `${Math.abs(sdl)}d late` : sdl === 0 ? 'Today' : `${sdl}d`}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-3.5 py-2.5">
-                          <div className="flex items-center gap-1">
-                            <button className="w-[26px] h-[26px] rounded flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-gray-900 transition-colors" onClick={() => openEditTask(s)}>
-                              <Maximize2 size={13} />
-                            </button>
-                            <button className="w-[26px] h-[26px] rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={async () => {
-                              if (await confirm({ title: 'Delete Subtask', message: 'Are you sure you want to delete this subtask?', danger: true })) {
-                                setTasks(tasks.filter(x => x.id !== s.id));
-                                toast('Subtask deleted');
+                          {dl !== null && (
+                            <span className={`text-[10px] font-semibold ${dueClass}`}>
+                              {dl < 0 ? `${Math.abs(dl)}d late` : dl === 0 ? 'Today' : `${dl}d`}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3.5 py-2.5">
+                        <div className="flex items-center gap-1">
+                          <button className="w-[26px] h-[26px] rounded flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-gray-900 transition-colors" onClick={() => openEditTask(t)}>
+                            <Maximize2 size={13} />
+                          </button>
+                          <button className="w-[26px] h-[26px] rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={async () => {
+                            if (await confirm({ title: 'Delete Task', message: 'Are you sure you want to delete this task?', danger: true })) {
+                              try {
+                                await persistDeleteTask(t.id);
+                                toast('Task deleted', 'success');
+                              } catch (error) {
+                                console.error('Error deleting task:', error);
+                                toast('Failed to delete task', 'error');
                               }
-                            }}>
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+                            }
+                          }}>
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {showSubtasks && childTasks.length > 0 && childTasks.map((s) => {
+                      const sc = clients.find(x => x.id === s.clientId);
+                      const sa = users.find(x => x.id === s.assigneeId);
+                      const sdl = daysLeft(s.dueDate);
+                      const sIsSelected = selected.includes(s.id);
+                      const sTaskType = taskTypes.find(type => type.name === (s.issueType || 'Subtask'));
+                      
+                      let sDueClass = "text-gray-500";
+                      let sRowClass = "";
+                      if (sdl !== null) {
+                        if (sdl < 0) {
+                          sDueClass = "text-red-600 font-bold";
+                          sRowClass = "bg-red-50/20";
+                        } else if (sdl <= 2) {
+                          sDueClass = "text-orange-600 font-bold";
+                          sRowClass = "bg-orange-50/20";
+                        } else {
+                          sDueClass = "text-gray-400";
+                        }
+                      }
+
+                      return (
+                        <tr key={s.id} className={`border-b border-gray-100 transition-colors ${sIsSelected ? 'bg-blue-50/30' : sRowClass ? `${sRowClass} hover:opacity-80` : 'bg-gray-50/30 hover:bg-gray-50'}`}>
+                          <td className="px-3.5 py-2.5 pl-8 text-center">
+                            <div className="w-1.5 h-1.5 rounded-full bg-gray-300 inline-block mr-2" />
+                            <input 
+                              type="checkbox" 
+                              className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                              checked={sIsSelected} 
+                              onChange={() => toggleSelect(s.id)} 
+                            />
+                          </td>
+                          <td className="px-3.5 py-2.5">
+                            <div className="flex items-center gap-1.5" title={sTaskType?.name}>
+                              {sTaskType && (
+                                <div className="w-4 h-4 rounded flex items-center justify-center text-white" style={{ backgroundColor: sTaskType.color }}>
+                                  <IconRenderer name={sTaskType.icon} size={10} />
+                                </div>
+                              )}
+                              <span className="text-[11px] font-mono text-gray-400">#{s.id}</span>
+                            </div>
+                          </td>
+                          <td className="px-3.5 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <div className={`font-medium cursor-pointer hover:underline ${s.status === 'Completed' ? 'line-through text-gray-400' : 'text-gray-700'}`} onClick={() => openEditTask(s)}>{s.title}</div>
+                            </div>
+                          </td>
+                          <td className="px-3.5 py-2.5">
+                            <div className="flex items-center gap-1 text-[11px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded w-fit" title={`Parent: ${t.title}`}>
+                              ↑ #{t.id}
+                            </div>
+                          </td>
+                          <td className="px-3.5 py-2.5 text-[12px] text-gray-500">{sc?.name || '—'}</td>
+                          <td className="px-3.5 py-2.5"><TypeChip type={s.type} /></td>
+                          <td className="px-3.5 py-2.5">
+                            <select 
+                              className="bg-transparent border-none outline-none text-[12px] font-medium cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 -ml-1"
+                              value={s.status}
+                              onChange={e => updateTask(s.id, { status: e.target.value })}
+                            >
+                              {(() => {
+                                const currentTaskType = taskTypes.find(type => type.name === (s.issueType || 'Task'));
+                                const currentWorkflow = currentTaskType?.workflowId ? workflows.find(w => w.id === currentTaskType.workflowId) : null;
+                                
+                                let options = Array.from(new Set(workflows.flatMap(w => w.statuses)));
+                                if (currentWorkflow) {
+                                  options = currentWorkflow.statuses.filter(opt => {
+                                    if (opt === s.status) return true;
+                                    const transition = currentWorkflow.transitions.find(tr => tr.from === s.status);
+                                    return transition ? transition.to.includes(opt) : false;
+                                  });
+                                }
+                                if (!options.includes(s.status)) {
+                                  options.push(s.status);
+                                }
+                                return options.map(st => <option key={st} value={st}>{st}</option>);
+                              })()}
+                            </select>
+                          </td>
+                          <td className="px-3.5 py-2.5">
+                            <select 
+                              className="bg-transparent border-none outline-none text-[12px] font-medium cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 -ml-1"
+                              value={s.priority}
+                              onChange={e => updateTask(s.id, { priority: e.target.value })}
+                            >
+                              {Object.keys(PRIORITY_COLORS).map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                          </td>
+                          <td className="px-3.5 py-2.5">
+                            <div className="flex items-center gap-1.5 relative group">
+                              <Avatar user={sa} size={22} />
+                              <select 
+                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                value={s.assigneeId}
+                                onChange={e => updateTask(s.id, { assigneeId: e.target.value })}
+                                title="Change Assignee"
+                              >
+                                {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                              </select>
+                              <span className="text-[12px] group-hover:text-blue-600 transition-colors">{sa?.name?.split(' ')[0] || '—'}</span>
+                            </div>
+                          </td>
+                          <td className="px-3.5 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <input 
+                                type="date" 
+                                className={`bg-transparent border-none outline-none text-[12px] cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 -ml-1 w-[110px] ${sdl !== null && sdl < 0 ? 'text-red-600 font-medium' : 'text-gray-600'}`}
+                                value={s.dueDate}
+                                onChange={e => updateTask(s.id, { dueDate: e.target.value })}
+                              />
+                              {sdl !== null && (
+                                <span className={`text-[10px] font-semibold ${sDueClass}`}>
+                                  {sdl < 0 ? `${Math.abs(sdl)}d late` : sdl === 0 ? 'Today' : `${sdl}d`}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3.5 py-2.5">
+                            <div className="flex items-center gap-1">
+                              <button className="w-[26px] h-[26px] rounded flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-gray-900 transition-colors" onClick={() => openEditTask(s)}>
+                                <Maximize2 size={13} />
+                              </button>
+                              <button className="w-[26px] h-[26px] rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={async () => {
+                                if (await confirm({ title: 'Delete Subtask', message: 'Are you sure you want to delete this subtask?', danger: true })) {
+                                  try {
+                                    await persistDeleteTask(s.id);
+                                    toast('Subtask deleted', 'success');
+                                  } catch (error) {
+                                    console.error('Error deleting subtask:', error);
+                                    toast('Failed to delete subtask', 'error');
+                                  }
+                                }
+                              }}>
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {filtered.length === 0 && (
+            <div className="flex flex-col items-center justify-center p-12 text-gray-500 gap-3">
+              <ListTodo size={32} className="opacity-30" />
+              <div className="text-center">
+                <h3 className="font-semibold text-gray-700 text-[15px]">No tasks found</h3>
+              </div>
+            </div>
+          )}
+          {paginatedTasks.map(t => {
+            const c = clients.find(x => x.id === t.clientId);
+            const a = users.find(x => x.id === t.assigneeId);
+            const dl = daysLeft(t.dueDate);
+            const isSelected = selected.includes(t.id);
+            const taskType = taskTypes.find(type => type.name === (t.issueType || 'Task'));
+            
+            return (
+              <div key={t.id} className={`p-4 ${isSelected ? 'bg-blue-50/30' : ''}`} onClick={() => openEditTask(t)}>
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      checked={isSelected}
+                      onClick={e => e.stopPropagation()}
+                      onChange={() => toggleSelect(t.id)}
+                    />
+                    <span className="text-[11px] font-mono text-gray-400">#{t.id}</span>
+                    <TypeChip type={t.type} />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {dl !== null && (
+                      <span className={`text-[10px] font-bold ${dl < 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                        {dl < 0 ? `${Math.abs(dl)}d late` : dl === 0 ? 'Today' : `${dl}d`}
+                      </span>
+                    )}
+                    <Avatar user={a} size={20} />
+                  </div>
+                </div>
+                
+                <h4 className="text-[14px] font-semibold text-gray-900 mb-1">{t.title}</h4>
+                <p className="text-[12px] text-gray-500 mb-3">{c?.name || 'No Client'}</p>
+                
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                    <select 
+                      className="text-[11px] font-medium bg-gray-50 border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-500"
+                      value={t.status}
+                      onChange={e => updateTask(t.id, { status: e.target.value })}
+                    >
+                      {(() => {
+                        const currentTaskType = taskTypes.find(type => type.name === (t.issueType || 'Task'));
+                        const currentWorkflow = currentTaskType?.workflowId ? workflows.find(w => w.id === currentTaskType.workflowId) : null;
+                        
+                        let options = Array.from(new Set(workflows.flatMap(w => w.statuses)));
+                        if (currentWorkflow) {
+                          options = currentWorkflow.statuses.filter(opt => {
+                            if (opt === t.status) return true;
+                            const transition = currentWorkflow.transitions.find(tr => tr.from === t.status);
+                            return transition ? transition.to.includes(opt) : false;
+                          });
+                        }
+                        if (!options.includes(t.status)) {
+                          options.push(t.status);
+                        }
+                        return options.map(s => <option key={s} value={s}>{s}</option>);
+                      })()}
+                    </select>
+                    <select 
+                      className="text-[11px] font-medium bg-gray-50 border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-500"
+                      value={t.priority}
+                      onChange={e => updateTask(t.id, { priority: e.target.value as any })}
+                    >
+                      {Object.keys(PRIORITY_COLORS).map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button className="p-2 text-gray-400 hover:text-gray-900" onClick={(e) => { e.stopPropagation(); openEditTask(t); }}>
+                      <Maximize2 size={14} />
+                    </button>
+                    <button className="p-2 text-gray-400 hover:text-red-600" onClick={async (e) => {
+                      e.stopPropagation();
+                      if (await confirm({ title: 'Delete Task', message: 'Are you sure?', danger: true })) {
+                        try {
+                          await persistDeleteTask(t.id);
+                          toast('Task deleted', 'success');
+                        } catch (error) {
+                          console.error('Error deleting task:', error);
+                          toast('Failed to delete task', 'error');
+                        }
+                      }
+                    }}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        
         <Pagination 
           totalItems={filtered.length}
           itemsPerPage={itemsPerPage}
