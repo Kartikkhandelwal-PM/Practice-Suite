@@ -46,7 +46,7 @@ export function SettingsPage() {
   const [workflowForm, setWorkflowForm] = useState<Workflow | null>(null);
   const [workflowStatusesInput, setWorkflowStatusesInput] = useState('');
 
-  const functionsBaseUrl = `${(import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '')}/.netlify/functions`;
+  const functionsBaseUrl = `${window.location.origin.replace(/\/$/, '')}/.netlify/functions`;
 
   const openUserCreate = () => {
     setUserForm({ id: genUUID(), name: '', email: '', role: 'Staff', designation: '', color: '#2563eb', active: true });
@@ -90,9 +90,12 @@ export function SettingsPage() {
             }),
           });
 
-          const payload = await response.json();
+          const payload = await response.json().catch(() => null);
           if (!response.ok) {
-            throw new Error(payload.error || 'Failed to create team member');
+            if (response.status === 404) {
+              throw new Error('Team management functions are unavailable on this server. Run the app with Netlify functions enabled.');
+            }
+            throw new Error(payload?.error || 'Failed to create team member');
           }
 
           setUsers(prev => [payload.user, ...prev]);
@@ -108,9 +111,12 @@ export function SettingsPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(userForm),
             });
-            const payload = await response.json();
+            const payload = await response.json().catch(() => null);
             if (!response.ok) {
-              throw new Error(payload.error || 'Failed to update user');
+              if (response.status === 404) {
+                throw new Error('Team management functions are unavailable on this server. Run the app with Netlify functions enabled.');
+              }
+              throw new Error(payload?.error || 'Failed to update user');
             }
             setUsers(prev => prev.map(user => user.id === userForm.id ? payload.user : user));
             toast('User updated', 'success');
@@ -119,7 +125,7 @@ export function SettingsPage() {
       setUserModal(null);
     } catch (error) {
       console.error('Error saving user:', error);
-      toast('Failed to save user', 'error');
+      toast(error instanceof Error ? error.message : 'Failed to save user', 'error');
     }
   };
 
@@ -134,16 +140,19 @@ export function SettingsPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id }),
           });
-          const payload = await response.json();
+          const payload = await response.json().catch(() => null);
           if (!response.ok) {
-            throw new Error(payload.error || 'Failed to delete user');
+            if (response.status === 404) {
+              throw new Error('Team management functions are unavailable on this server. Run the app with Netlify functions enabled.');
+            }
+            throw new Error(payload?.error || 'Failed to delete user');
           }
           setUsers(prev => prev.filter(user => user.id !== id));
         }
         toast('User deleted', 'success');
       } catch (error) {
         console.error('Error deleting user:', error);
-        toast('Failed to delete user', 'error');
+        toast(error instanceof Error ? error.message : 'Failed to delete user', 'error');
       }
     }
   };
