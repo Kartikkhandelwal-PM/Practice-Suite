@@ -1,10 +1,10 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 const getAiClient = () => {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
   if (!apiKey) {
-    throw new Error('Missing Gemini API key. Set GEMINI_API_KEY in .env.local and restart the Vite server.');
+    throw new Error('Missing Gemini API key. Set VITE_GEMINI_API_KEY and restart the app.');
   }
 
   return new GoogleGenAI({ apiKey });
