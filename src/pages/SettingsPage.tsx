@@ -368,14 +368,9 @@ export function SettingsPage() {
                           <div className="text-[11px] text-gray-500">{type.description}</div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <button className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-900 transition-colors" onClick={() => openTaskTypeEdit(type)}>
-                          <Edit2 size={14} />
-                        </button>
-                        <button className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => deleteTaskType(type.id)}>
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                      <button className="text-gray-400 hover:text-gray-900 transition-colors" onClick={() => openTaskTypeEdit(type)}>
+                        <Edit2 size={14} />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -396,14 +391,9 @@ export function SettingsPage() {
                           <div className="text-[14px] font-semibold text-gray-900">{wf.name}</div>
                           <div className="text-[12px] text-gray-500">{wf.description}</div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <button className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-900 transition-colors" onClick={() => openWorkflowEdit(wf)}>
-                            <Edit2 size={14} />
-                          </button>
-                          <button className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => deleteWorkflow(wf.id)}>
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
+                        <button className="text-gray-400 hover:text-gray-900 transition-colors" onClick={() => openWorkflowEdit(wf)}>
+                          <Edit2 size={14} />
+                        </button>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
                         {wf.statuses.map((status, i) => (

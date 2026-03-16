@@ -1,6 +1,5 @@
 export interface User {
   id: string;
-  profile_id?: string;
   name: string;
   email: string;
   role: string;
@@ -12,7 +11,6 @@ export interface User {
 
 export interface Client {
   id: string;
-  profile_id?: string;
   name: string;
   pan: string;
   gstin: string;
@@ -57,7 +55,6 @@ export interface Activity {
 
 export interface Task {
   id: string;
-  profile_id?: string;
   title: string;
   clientId: string;
   type: string;
@@ -82,7 +79,6 @@ export interface Task {
 
 export interface TaskTypeConfig {
   id: string;
-  profile_id?: string;
   name: string;
   icon: string;
   color: string;
@@ -97,7 +93,6 @@ export interface WorkflowTransition {
 
 export interface Workflow {
   id: string;
-  profile_id?: string;
   name: string;
   description?: string;
   statuses: string[];
@@ -106,7 +101,6 @@ export interface Workflow {
 
 export interface Deadline {
   id: string;
-  profile_id?: string;
   title: string;
   desc: string;
   category: string;
@@ -118,7 +112,6 @@ export interface Deadline {
 
 export interface Template {
   id: string;
-  profile_id?: string;
   name: string;
   category: string;
   recurring: string;
@@ -130,7 +123,6 @@ export interface Template {
 
 export interface Email {
   id: string;
-  profile_id?: string;
   from: string;
   fromEmail: string;
   to?: string;
@@ -153,7 +145,6 @@ export interface Email {
 
 export interface Note {
   id: string;
-  profile_id?: string;
   title: string;
   content: string;
   color: string;
@@ -164,7 +155,6 @@ export interface Note {
 
 export interface Password {
   id: string;
-  profile_id?: string;
   clientId: string;
   portal: string;
   url: string;
@@ -178,7 +168,6 @@ export interface Password {
 
 export interface Document {
   id: string;
-  profile_id?: string;
   folderId: string;
   name: string;
   type: string;
@@ -193,7 +182,6 @@ export interface Document {
 
 export interface Folder {
   id: string;
-  profile_id?: string;
   name: string;
   parentId: string | null;
   clientId: string | null;
@@ -202,7 +190,6 @@ export interface Folder {
 
 export interface Meeting {
   id: string;
-  profile_id?: string;
   title: string;
   clientId: string;
   type: string;

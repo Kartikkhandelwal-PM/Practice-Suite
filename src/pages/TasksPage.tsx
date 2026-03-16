@@ -137,20 +137,12 @@ export function TasksPage() {
     if (dateStart) t = t.filter(x => x.dueDate >= dateStart);
     if (dateEnd) t = t.filter(x => x.dueDate <= dateEnd);
     
-    // If showSubtasks is ON, we only want to show top-level tasks in the main list
-    // to avoid double rendering. However, if a subtask matches the filter but its
-    // parent doesn't, we should still show it at the top level.
-    if (showSubtasks) {
-      const filteredIds = new Set(t.map(x => x.id));
-      t = t.filter(x => !x.parentId || !filteredIds.has(x.parentId));
-    }
-
     return [...t].sort((a, b) => {
       const av = sortCol === 'dueDate' ? (a[sortCol] || '9999-99-99') : (a[sortCol] || '');
       const bv = sortCol === 'dueDate' ? (b[sortCol] || '9999-99-99') : (b[sortCol] || '');
       return av < bv ? -sortDir : av > bv ? sortDir : 0;
     });
-  }, [tasks, clients, tab, search, filterStatus, filterClient, filterType, filterIssueType, filterPriority, filterAssignee, dateStart, dateEnd, sortCol, sortDir, showSubtasks]);
+  }, [tasks, clients, tab, search, filterStatus, filterClient, filterType, filterIssueType, filterPriority, filterAssignee, dateStart, dateEnd, sortCol, sortDir]);
 
   const paginatedTasks = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -336,18 +328,6 @@ export function TasksPage() {
                   <Calendar size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input type="date" className="w-full pl-8 pr-2.5 py-1.5 border border-gray-200 rounded-lg text-[12.5px] outline-none focus:border-blue-600" value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
                 </div>
-              </div>
-              <div className="flex items-center gap-2 pt-6">
-                <input 
-                  type="checkbox" 
-                  id="showSubtasksFilter"
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                  checked={showSubtasks}
-                  onChange={e => setShowSubtasks(e.target.checked)}
-                />
-                <label htmlFor="showSubtasksFilter" className="text-[12.5px] font-medium text-gray-700 cursor-pointer">
-                  Show Subtasks
-                </label>
               </div>
               <div className="flex items-end">
                 <button 
@@ -745,146 +725,87 @@ export function TasksPage() {
             const dl = daysLeft(t.dueDate);
             const isSelected = selected.includes(t.id);
             const taskType = taskTypes.find(type => type.name === (t.issueType || 'Task'));
-            const childTasks = tasks.filter(x => x.parentId === t.id);
-            const parentTask = t.parentId ? tasks.find(x => x.id === t.parentId) : null;
             
             return (
-              <div key={t.id} className="flex flex-col">
-                <div className={`p-4 ${isSelected ? 'bg-blue-50/30' : ''}`} onClick={() => openEditTask(t)}>
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex items-center gap-2">
-                      <input 
-                        type="checkbox" 
-                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        checked={isSelected}
-                        onClick={e => e.stopPropagation()}
-                        onChange={() => toggleSelect(t.id)}
-                      />
-                      <div className="flex items-center gap-1.5">
-                        {taskType && (
-                          <div className="w-4 h-4 rounded flex items-center justify-center text-white" style={{ backgroundColor: taskType.color }}>
-                            <IconRenderer name={taskType.icon} size={10} />
-                          </div>
-                        )}
-                        <span className="text-[11px] font-mono text-gray-400">#{t.id}</span>
-                      </div>
-                      <TypeChip type={t.type} />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {dl !== null && (
-                        <span className={`text-[10px] font-bold ${dl < 0 ? 'text-red-600' : dl <= 2 ? 'text-orange-600' : 'text-gray-500'}`}>
-                          {dl < 0 ? `${Math.abs(dl)}d late` : dl === 0 ? 'Today' : `${dl}d`}
-                        </span>
-                      )}
-                      <Avatar user={a} size={20} />
-                    </div>
+              <div key={t.id} className={`p-4 ${isSelected ? 'bg-blue-50/30' : ''}`} onClick={() => openEditTask(t)}>
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      checked={isSelected}
+                      onClick={e => e.stopPropagation()}
+                      onChange={() => toggleSelect(t.id)}
+                    />
+                    <span className="text-[11px] font-mono text-gray-400">#{t.id}</span>
+                    <TypeChip type={t.type} />
                   </div>
-                  
-                  <div className="mb-1">
-                    {parentTask && (
-                      <div className="text-[10px] text-blue-600 font-medium mb-0.5">
-                        ↑ Parent: #{parentTask.id}
-                      </div>
+                  <div className="flex items-center gap-2">
+                    {dl !== null && (
+                      <span className={`text-[10px] font-bold ${dl < 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                        {dl < 0 ? `${Math.abs(dl)}d late` : dl === 0 ? 'Today' : `${dl}d`}
+                      </span>
                     )}
-                    <h4 className="text-[14px] font-semibold text-gray-900 leading-tight">{t.title}</h4>
-                  </div>
-                  <p className="text-[12px] text-gray-500 mb-3">{c?.name || 'No Client'}</p>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                      <select 
-                        className="text-[11px] font-medium bg-gray-50 border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-500"
-                        value={t.status}
-                        onChange={e => updateTask(t.id, { status: e.target.value })}
-                      >
-                        {(() => {
-                          const currentTaskType = taskTypes.find(type => type.name === (t.issueType || 'Task'));
-                          const currentWorkflow = currentTaskType?.workflowId ? workflows.find(w => w.id === currentTaskType.workflowId) : null;
-                          
-                          let options = Array.from(new Set(workflows.flatMap(w => w.statuses)));
-                          if (currentWorkflow) {
-                            options = currentWorkflow.statuses.filter(opt => {
-                              if (opt === t.status) return true;
-                              const transition = currentWorkflow.transitions.find(tr => tr.from === t.status);
-                              return transition ? transition.to.includes(opt) : false;
-                            });
-                          }
-                          if (!options.includes(t.status)) {
-                            options.push(t.status);
-                          }
-                          return options.map(s => <option key={s} value={s}>{s}</option>);
-                        })()}
-                      </select>
-                      <select 
-                        className="text-[11px] font-medium bg-gray-50 border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-500"
-                        value={t.priority}
-                        onChange={e => updateTask(t.id, { priority: e.target.value as any })}
-                      >
-                        {Object.keys(PRIORITY_COLORS).map(p => <option key={p} value={p}>{p}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button className="p-2 text-gray-400 hover:text-gray-900" onClick={(e) => { e.stopPropagation(); openEditTask(t); }}>
-                        <Maximize2 size={14} />
-                      </button>
-                      <button className="p-2 text-gray-400 hover:text-red-600" onClick={async (e) => {
-                        e.stopPropagation();
-                        if (await confirm({ title: 'Delete Task', message: 'Are you sure?', danger: true })) {
-                          try {
-                            await persistDeleteTask(t.id);
-                            toast('Task deleted', 'success');
-                          } catch (error) {
-                            console.error('Error deleting task:', error);
-                            toast('Failed to delete task', 'error');
-                          }
-                        }
-                      }}>
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                    <Avatar user={a} size={20} />
                   </div>
                 </div>
-
-                {/* Mobile Subtasks */}
-                {showSubtasks && childTasks.length > 0 && (
-                  <div className="bg-gray-50/50 border-t border-gray-100 pl-4 py-1 divide-y divide-gray-100">
-                    {childTasks.map(s => {
-                      const sc = clients.find(x => x.id === s.clientId);
-                      const sa = users.find(x => x.id === s.assigneeId);
-                      const sdl = daysLeft(s.dueDate);
-                      const sIsSelected = selected.includes(s.id);
-                      
-                      return (
-                        <div key={s.id} className={`p-3 flex items-start gap-3 ${sIsSelected ? 'bg-blue-50/30' : ''}`} onClick={(e) => { e.stopPropagation(); openEditTask(s); }}>
-                          <div className="pt-1">
-                            <input 
-                              type="checkbox" 
-                              className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              checked={sIsSelected}
-                              onClick={e => e.stopPropagation()}
-                              onChange={() => toggleSelect(s.id)}
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2 mb-0.5">
-                              <span className="text-[10px] font-mono text-gray-400">#{s.id}</span>
-                              {sdl !== null && (
-                                <span className={`text-[9px] font-bold ${sdl < 0 ? 'text-red-600' : 'text-gray-500'}`}>
-                                  {sdl < 0 ? `${Math.abs(sdl)}d late` : sdl === 0 ? 'Today' : `${sdl}d`}
-                                </span>
-                              )}
-                            </div>
-                            <h5 className={`text-[13px] font-medium leading-tight ${s.status === 'Completed' ? 'line-through text-gray-400' : 'text-gray-700'}`}>{s.title}</h5>
-                            <div className="flex items-center justify-between mt-2">
-                              <StatusBadge status={s.status} />
-                              <Avatar user={sa} size={18} />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                
+                <h4 className="text-[14px] font-semibold text-gray-900 mb-1">{t.title}</h4>
+                <p className="text-[12px] text-gray-500 mb-3">{c?.name || 'No Client'}</p>
+                
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                    <select 
+                      className="text-[11px] font-medium bg-gray-50 border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-500"
+                      value={t.status}
+                      onChange={e => updateTask(t.id, { status: e.target.value })}
+                    >
+                      {(() => {
+                        const currentTaskType = taskTypes.find(type => type.name === (t.issueType || 'Task'));
+                        const currentWorkflow = currentTaskType?.workflowId ? workflows.find(w => w.id === currentTaskType.workflowId) : null;
+                        
+                        let options = Array.from(new Set(workflows.flatMap(w => w.statuses)));
+                        if (currentWorkflow) {
+                          options = currentWorkflow.statuses.filter(opt => {
+                            if (opt === t.status) return true;
+                            const transition = currentWorkflow.transitions.find(tr => tr.from === t.status);
+                            return transition ? transition.to.includes(opt) : false;
+                          });
+                        }
+                        if (!options.includes(t.status)) {
+                          options.push(t.status);
+                        }
+                        return options.map(s => <option key={s} value={s}>{s}</option>);
+                      })()}
+                    </select>
+                    <select 
+                      className="text-[11px] font-medium bg-gray-50 border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-500"
+                      value={t.priority}
+                      onChange={e => updateTask(t.id, { priority: e.target.value as any })}
+                    >
+                      {Object.keys(PRIORITY_COLORS).map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
                   </div>
-                )}
+                  <div className="flex items-center gap-1">
+                    <button className="p-2 text-gray-400 hover:text-gray-900" onClick={(e) => { e.stopPropagation(); openEditTask(t); }}>
+                      <Maximize2 size={14} />
+                    </button>
+                    <button className="p-2 text-gray-400 hover:text-red-600" onClick={async (e) => {
+                      e.stopPropagation();
+                      if (await confirm({ title: 'Delete Task', message: 'Are you sure?', danger: true })) {
+                        try {
+                          await persistDeleteTask(t.id);
+                          toast('Task deleted', 'success');
+                        } catch (error) {
+                          console.error('Error deleting task:', error);
+                          toast('Failed to delete task', 'error');
+                        }
+                      }
+                    }}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
               </div>
             );
           })}

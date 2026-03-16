@@ -49,26 +49,15 @@ export const handler: Handler = async (event, context) => {
 
     // AI Status Route
     if (path === '/ai/status' && method === 'GET') {
-      const custom = process.env.CUSTOM_GEMINI_KEY?.trim();
-      const system = process.env.GEMINI_API_KEY?.trim();
-      let key = null;
-      let source = 'none';
-
-      if (custom && custom.startsWith('AIza') && custom.length > 20) {
-        key = custom;
-        source = 'custom';
-      } else if (system && system.startsWith('AIza') && system.length > 20) {
-        key = system;
-        source = 'system';
-      }
-      
+      const key = process.env.CUSTOM_GEMINI_KEY || process.env.GEMINI_API_KEY;
+      const isConfigured = !!key && key !== "AI Studio Free Tier" && key.startsWith('AIza');
       return { 
         statusCode: 200, 
         headers, 
         body: JSON.stringify({ 
-          configured: !!key,
-          model: "gemini-2.0-flash",
-          key_source: source
+          configured: isConfigured,
+          model: "gemini-3-flash-preview",
+          key_source: process.env.CUSTOM_GEMINI_KEY ? 'custom' : 'system'
         }) 
       };
     }
@@ -76,34 +65,28 @@ export const handler: Handler = async (event, context) => {
     // AI Route
     if (path === '/ai/generate' && method === 'POST') {
       const { prompt, responseSchema } = body;
-      const custom = process.env.CUSTOM_GEMINI_KEY?.trim();
-      const system = process.env.GEMINI_API_KEY?.trim();
-      let apiKey = null;
-      let source = 'none';
+      let apiKey = process.env.CUSTOM_GEMINI_KEY || process.env.GEMINI_API_KEY;
+      if (apiKey) apiKey = apiKey.trim();
+      
+      // Ignore the placeholder string if it's passed literally
+      if (apiKey === "AI Studio Free Tier" || !apiKey?.startsWith('AIza')) {
+        apiKey = process.env.CUSTOM_GEMINI_KEY?.trim();
+      }
 
-      if (custom && custom.startsWith('AIza') && custom.length > 20) {
-        apiKey = custom;
-        source = 'custom';
-      } else if (system && system.startsWith('AIza') && system.length > 20) {
-        apiKey = system;
-        source = 'system';
+      console.log('AI Request (Netlify) received. Key found:', !!apiKey);
+      if (apiKey) {
+        console.log('Key starts with:', apiKey.substring(0, 8), '... length:', apiKey.length);
       }
 
       if (!apiKey) {
-        return { 
-          statusCode: 500, 
-          headers, 
-          body: JSON.stringify({ 
-            error: 'Gemini API key not configured. Please add CUSTOM_GEMINI_KEY to your environment variables in AI Studio settings.' 
-          }) 
-        };
+        return { statusCode: 500, headers, body: JSON.stringify({ error: 'Gemini API key not configured' }) };
       }
       
       try {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: prompt,
+          model: "gemini-3-flash-preview",
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {
             responseMimeType: "application/json",
             responseSchema: responseSchema
@@ -111,16 +94,12 @@ export const handler: Handler = async (event, context) => {
         });
         return { statusCode: 200, headers, body: JSON.stringify({ text: response.text }) };
       } catch (error: any) {
-        console.error(`Gemini Error (${source}):`, error);
-        const isQuotaError = error.message?.includes('429') || error.message?.includes('quota');
-        return { 
-          statusCode: isQuotaError ? 429 : 500, 
-          headers, 
-          body: JSON.stringify({ 
-            error: isQuotaError ? "AI Quota Exceeded. Please wait a minute or provide a different API key in settings." : error.message,
-            details: error.message
-          }) 
-        };
+        console.error('Gemini Error:', error);
+        let errorMessage = error.message;
+        if (errorMessage.includes('API key not valid')) {
+          errorMessage = 'The Gemini API key provided is invalid. Please update it in the application settings.';
+        }
+        return { statusCode: 500, headers, body: JSON.stringify({ error: errorMessage }) };
       }
     }
 

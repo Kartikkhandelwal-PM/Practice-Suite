@@ -29,7 +29,7 @@ Return a JSON object with the following keys:
 "title": A concise task title based on the email (e.g., "Process TDS for Client X").
 "overview": A brief 1-2 sentence summary of the email's content.
 "steps": An array of 3-5 specific action items derived from the email.
-"suggestedReply": A professional, polite email reply draft from ${userName} to ${senderName}. The reply should be well-structured with proper greetings, clear paragraphs, and a professional sign-off. Use HTML tags like <p> and <br> for formatting.
+"suggestedReply": A professional, polite email reply draft from ${userName} to ${senderName}.
 
 Do not include any extra conversational text or markdown code blocks outside the JSON.`;
 
@@ -83,7 +83,7 @@ Do not include any extra conversational text or markdown code blocks outside the
     const userFirstName = (userName || 'User').split(' ')[0];
     return {
       title: `Follow up: ${subject || 'Email'}`,
-      overview: error.message || "AI summary unavailable.",
+      overview: error.message || "AI summary unavailable. Please ensure a valid Gemini API key is set in the application settings.",
       steps: ["Review email and take necessary action."],
       suggestedReply: `Dear ${firstName},\n\nThank you for your email. I have received it and will get back to you shortly.\n\nRegards,\n${userFirstName}`
     };
@@ -135,11 +135,8 @@ export const improveDraft = async (subject: string, body: string): Promise<{ sub
       console.error("Failed to parse AI JSON (Draft):", cleanText);
       throw new Error("Invalid AI response format");
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error improving draft:", error);
-    return { 
-      subject: subject, 
-      body: body + `<br><br><div style="color: #d9534f; font-size: 12px; border: 1px solid #f2dede; padding: 8px; border-radius: 4px; background: #fcf8e3;"><strong>AI Error:</strong> ${error.message || 'Failed to generate draft.'}</div>` 
-    };
+    return { subject, body };
   }
 };

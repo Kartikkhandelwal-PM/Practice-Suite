@@ -37,28 +37,7 @@ export function AuthPage() {
           email,
           password,
         });
-        if (error) {
-          if (email.toLowerCase() === 'kartikkhandelwal1104@gmail.com') {
-            // Attempt auto-signup via backend
-            const res = await fetch('/api/auth/login', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, password })
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error?.message || 'Authentication failed');
-            if (data.session) {
-              await supabase.auth.setSession({
-                access_token: data.session.access_token,
-                refresh_token: data.session.refresh_token
-              });
-            } else {
-              throw new Error('Demo account created. Please check your email to verify it before logging in.');
-            }
-          } else {
-            throw error;
-          }
-        }
+        if (error) throw error;
         toast('Welcome back!', 'success');
         setIsAuthenticated(true);
       }
