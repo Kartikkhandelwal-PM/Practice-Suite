@@ -65,14 +65,25 @@ Do not include any extra conversational text or markdown code blocks outside the
       throw new Error("Empty AI response");
     }
 
-    return JSON.parse(data.text) as EmailSummary;
-  } catch (error) {
+    // Strip markdown code blocks if present
+    let cleanText = data.text.trim();
+    if (cleanText.startsWith('```')) {
+      cleanText = cleanText.replace(/^```[a-z]*\n/i, '').replace(/\n```$/m, '').trim();
+    }
+
+    try {
+      return JSON.parse(cleanText) as EmailSummary;
+    } catch (parseError) {
+      console.error("Failed to parse AI JSON:", cleanText);
+      throw new Error("Invalid AI response format");
+    }
+  } catch (error: any) {
     console.error("Error summarizing email:", error);
     const firstName = (senderName || 'Sender').split(' ')[0];
     const userFirstName = (userName || 'User').split(' ')[0];
     return {
       title: `Follow up: ${subject || 'Email'}`,
-      overview: "AI summary unavailable. Please ensure a valid Gemini API key is set in the application settings.",
+      overview: error.message || "AI summary unavailable. Please ensure a valid Gemini API key is set in the application settings.",
       steps: ["Review email and take necessary action."],
       suggestedReply: `Dear ${firstName},\n\nThank you for your email. I have received it and will get back to you shortly.\n\nRegards,\n${userFirstName}`
     };
@@ -112,7 +123,18 @@ export const improveDraft = async (subject: string, body: string): Promise<{ sub
       throw new Error("Empty AI response");
     }
 
-    return JSON.parse(data.text);
+    // Strip markdown code blocks if present
+    let cleanText = data.text.trim();
+    if (cleanText.startsWith('```')) {
+      cleanText = cleanText.replace(/^```[a-z]*\n/i, '').replace(/\n```$/m, '').trim();
+    }
+
+    try {
+      return JSON.parse(cleanText);
+    } catch (parseError) {
+      console.error("Failed to parse AI JSON (Draft):", cleanText);
+      throw new Error("Invalid AI response format");
+    }
   } catch (error) {
     console.error("Error improving draft:", error);
     return { subject, body };

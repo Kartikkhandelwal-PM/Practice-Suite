@@ -51,7 +51,19 @@ export const handler: Handler = async (event, context) => {
     // AI Route
     if (path === '/ai/generate' && method === 'POST') {
       const { prompt, responseSchema } = body;
-      const apiKey = process.env.CUSTOM_GEMINI_KEY || process.env.GEMINI_API_KEY;
+      let apiKey = process.env.CUSTOM_GEMINI_KEY || process.env.GEMINI_API_KEY;
+      if (apiKey) apiKey = apiKey.trim();
+      
+      // Ignore the placeholder string if it's passed literally
+      if (apiKey === "AI Studio Free Tier" || !apiKey?.startsWith('AIza')) {
+        apiKey = process.env.CUSTOM_GEMINI_KEY?.trim();
+      }
+
+      console.log('AI Request (Netlify) received. Key found:', !!apiKey);
+      if (apiKey) {
+        console.log('Key starts with:', apiKey.substring(0, 8), '... length:', apiKey.length);
+      }
+
       if (!apiKey) {
         return { statusCode: 500, headers, body: JSON.stringify({ error: 'Gemini API key not configured' }) };
       }

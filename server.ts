@@ -18,7 +18,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnon
 import { GoogleGenAI, Type } from "@google/genai";
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
+// Removed top-level AI instance to ensure we always use the latest key from environment
 
 // Seed Data
 async function seedData() {
@@ -193,16 +193,30 @@ async function startServer() {
 
   // Gemini AI Route
   app.get('/api/ai/status', (req, res) => {
+    const key = process.env.CUSTOM_GEMINI_KEY || process.env.GEMINI_API_KEY;
+    const isConfigured = !!key && key !== "AI Studio Free Tier" && key.startsWith('AIza');
     res.json({ 
-      configured: !!process.env.GEMINI_API_KEY,
-      model: "gemini-3-flash-preview"
+      configured: isConfigured,
+      model: "gemini-3-flash-preview",
+      key_source: process.env.CUSTOM_GEMINI_KEY ? 'custom' : 'system'
     });
   });
 
   app.post('/api/ai/generate', async (req, res) => {
     const { prompt, responseSchema } = req.body;
-    const apiKey = process.env.CUSTOM_GEMINI_KEY || process.env.GEMINI_API_KEY;
+    let apiKey = process.env.CUSTOM_GEMINI_KEY || process.env.GEMINI_API_KEY;
+    if (apiKey) apiKey = apiKey.trim();
     
+    // Ignore the placeholder string if it's passed literally
+    if (apiKey === "AI Studio Free Tier" || !apiKey?.startsWith('AIza')) {
+      apiKey = process.env.CUSTOM_GEMINI_KEY?.trim();
+    }
+
+    console.log('AI Request received. Key found:', !!apiKey);
+    if (apiKey) {
+      console.log('Key starts with:', apiKey.substring(0, 8), '... length:', apiKey.length);
+    }
+
     if (!apiKey) {
       return res.status(500).json({ error: 'Gemini API key not configured' });
     }
