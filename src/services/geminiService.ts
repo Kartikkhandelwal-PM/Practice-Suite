@@ -1,14 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
-const getAiClient = () => {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('Missing Gemini API key. Set VITE_GEMINI_API_KEY and restart the app.');
-  }
-
-  return new GoogleGenAI({ apiKey });
-};
+const API_BASE = '/api/ai';
 
 export interface EmailSummary {
   title: string;
@@ -19,7 +9,6 @@ export interface EmailSummary {
 
 export const summarizeEmail = async (subject: string, body: string, senderName: string, userName: string): Promise<EmailSummary> => {
   try {
-    const ai = getAiClient();
     const prompt = `Analyze the following email and provide a summary, action steps, and a suggested professional reply.
 Sender: ${senderName}
 User: ${userName}
@@ -34,28 +23,30 @@ Return a JSON object with the following keys:
 
 Do not include any extra conversational text or markdown code blocks outside the JSON.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
+    const res = await fetch(`${API_BASE}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
         responseSchema: {
-          type: Type.OBJECT,
+          type: 'OBJECT',
           properties: {
-            title: { type: Type.STRING },
-            overview: { type: Type.STRING },
+            title: { type: 'STRING' },
+            overview: { type: 'STRING' },
             steps: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
+              type: 'ARRAY',
+              items: { type: 'STRING' }
             },
-            suggestedReply: { type: Type.STRING }
+            suggestedReply: { type: 'STRING' }
           },
           required: ["title", "overview", "steps", "suggestedReply"]
         }
-      }
+      })
     });
 
-    return JSON.parse(response.text || "{}") as EmailSummary;
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    return JSON.parse(data.text || "{}") as EmailSummary;
   } catch (error) {
     console.error("Error summarizing email:", error);
     return {
@@ -69,28 +60,29 @@ Do not include any extra conversational text or markdown code blocks outside the
 
 export const improveDraft = async (subject: string, body: string): Promise<{ subject: string, body: string }> => {
   try {
-    const ai = getAiClient();
     const prompt = body.trim()
       ? `Please rephrase and improve the following email draft to be more professional and clear. Return a JSON object with two keys: "subject" (a concise, professional subject line) and "body" (the improved email body in HTML format, using <p>, <br>, <strong> etc. for formatting). Do not include any extra conversational text or markdown code blocks outside the JSON.\n\nOriginal Subject: ${subject}\nOriginal Body: ${body}`
       : `Please write a professional email draft based on the subject: "${subject}". Return a JSON object with two keys: "subject" (a concise, professional subject line) and "body" (the email body in HTML format, using <p>, <br>, <strong> etc. for formatting). Do not include any extra conversational text or markdown code blocks outside the JSON.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
+    const res = await fetch(`${API_BASE}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
         responseSchema: {
-          type: Type.OBJECT,
+          type: 'OBJECT',
           properties: {
-            subject: { type: Type.STRING },
-            body: { type: Type.STRING }
+            subject: { type: 'STRING' },
+            body: { type: 'STRING' }
           },
           required: ["subject", "body"]
         }
-      }
+      })
     });
 
-    return JSON.parse(response.text || "{}");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    return JSON.parse(data.text || "{}");
   } catch (error) {
     console.error("Error improving draft:", error);
     return { subject, body };

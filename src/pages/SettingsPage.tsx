@@ -12,18 +12,12 @@ import { IconRenderer } from '../components/ui/IconRenderer';
 import { supabase } from '../lib/supabase';
 
 export function SettingsPage() {
-  const { users, setUsers, taskTypes, workflows, setIsAuthenticated, isDemoMode, updateUser, addUser, deleteUser, updateTaskType, addTaskType, deleteTaskType, updateWorkflow, addWorkflow, deleteWorkflow } = useApp();
+  const { users, taskTypes, workflows, setIsAuthenticated, updateUser, addUser, deleteUser, updateTaskType, addTaskType, deleteTaskType, updateWorkflow, addWorkflow, deleteWorkflow } = useApp();
   const toast = useToast();
   const { confirm } = useConfirm();
 
   const handleLogout = async () => {
     if (await confirm({ title: 'Logout', message: 'Are you sure you want to logout?', danger: true })) {
-      localStorage.removeItem('kdk-demo-mode');
-      if (isDemoMode) {
-        setIsAuthenticated(false);
-        toast('Logged out successfully', 'success');
-        return;
-      }
       const { error } = await supabase.auth.signOut();
       if (error) {
         toast(error.message, 'error');
@@ -37,7 +31,6 @@ export function SettingsPage() {
   const [tab, setTab] = useState<'profile' | 'team' | 'integrations' | 'notifications' | 'configurations'>('team');
   const [userModal, setUserModal] = useState<'create' | 'edit' | null>(null);
   const [userForm, setUserForm] = useState<User | null>(null);
-  const [userPassword, setUserPassword] = useState('');
 
   const [taskTypeModal, setTaskTypeModal] = useState<'create' | 'edit' | null>(null);
   const [taskTypeForm, setTaskTypeForm] = useState<TaskTypeConfig | null>(null);
@@ -46,17 +39,13 @@ export function SettingsPage() {
   const [workflowForm, setWorkflowForm] = useState<Workflow | null>(null);
   const [workflowStatusesInput, setWorkflowStatusesInput] = useState('');
 
-  const functionsBaseUrl = `${window.location.origin.replace(/\/$/, '')}/.netlify/functions`;
-
   const openUserCreate = () => {
     setUserForm({ id: genUUID(), name: '', email: '', role: 'Staff', designation: '', color: '#2563eb', active: true });
-    setUserPassword('');
     setUserModal('create');
   };
 
   const openUserEdit = (u: User) => {
     setUserForm({ ...u });
-    setUserPassword('');
     setUserModal('edit');
   };
 
@@ -67,92 +56,27 @@ export function SettingsPage() {
     }
     try {
       if (userModal === 'create') {
-        if (isDemoMode) {
-          await addUser(userForm);
-          toast('Demo user created locally', 'success');
-        } else {
-          if (userPassword.length < 6) {
-            toast('Password must be at least 6 characters', 'error');
-            return;
-          }
-
-          const response = await fetch(`${functionsBaseUrl}/create-team-member`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: userForm.email,
-              password: userPassword,
-              name: userForm.name,
-              role: userForm.role,
-              designation: userForm.designation,
-              color: userForm.color,
-              active: userForm.active,
-            }),
-          });
-
-          const payload = await response.json().catch(() => null);
-          if (!response.ok) {
-            if (response.status === 404) {
-              throw new Error('Team management functions are unavailable on this server. Run the app with Netlify functions enabled.');
-            }
-            throw new Error(payload?.error || 'Failed to create team member');
-          }
-
-          setUsers(prev => [payload.user, ...prev]);
-          toast('Team member created and registered', 'success');
-        }
-        } else {
-          if (isDemoMode) {
-            await updateUser(userForm.id, userForm);
-            toast('User updated', 'success');
-          } else {
-            const response = await fetch(`${functionsBaseUrl}/update-team-member`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(userForm),
-            });
-            const payload = await response.json().catch(() => null);
-            if (!response.ok) {
-              if (response.status === 404) {
-                throw new Error('Team management functions are unavailable on this server. Run the app with Netlify functions enabled.');
-              }
-              throw new Error(payload?.error || 'Failed to update user');
-            }
-            setUsers(prev => prev.map(user => user.id === userForm.id ? payload.user : user));
-            toast('User updated', 'success');
-          }
-        }
+        await addUser(userForm);
+        toast('User created', 'success');
+      } else {
+        await updateUser(userForm.id, userForm);
+        toast('User updated', 'success');
+      }
       setUserModal(null);
     } catch (error) {
       console.error('Error saving user:', error);
-      toast(error instanceof Error ? error.message : 'Failed to save user', 'error');
+      toast('Failed to save user', 'error');
     }
   };
 
   const delUser = async (id: string) => {
     if (await confirm({ title: 'Delete User', message: 'Are you sure you want to delete this user?', danger: true })) {
       try {
-        if (isDemoMode) {
-          await deleteUser(id);
-        } else {
-          const response = await fetch(`${functionsBaseUrl}/delete-team-member`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id }),
-          });
-          const payload = await response.json().catch(() => null);
-          if (!response.ok) {
-            if (response.status === 404) {
-              throw new Error('Team management functions are unavailable on this server. Run the app with Netlify functions enabled.');
-            }
-            throw new Error(payload?.error || 'Failed to delete user');
-          }
-          setUsers(prev => prev.filter(user => user.id !== id));
-        }
+        await deleteUser(id);
         toast('User deleted', 'success');
       } catch (error) {
         console.error('Error deleting user:', error);
-        toast(error instanceof Error ? error.message : 'Failed to delete user', 'error');
+        toast('Failed to delete user', 'error');
       }
     }
   };
@@ -349,7 +273,7 @@ export function SettingsPage() {
                             <button className="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-900 transition-colors" onClick={() => openUserEdit(u)}>
                               <Edit2 size={14} />
                             </button>
-                            <button className="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => delUser(u.id)}>
+                            <button className="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => deleteUser(u.id)}>
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -513,18 +437,6 @@ export function SettingsPage() {
               <label className="block text-[11.5px] font-semibold text-gray-500 mb-1.5">Email Address *</label>
               <input className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13.5px] outline-none focus:border-blue-600" type="email" value={userForm.email} onChange={e => setUserForm({ ...userForm, email: e.target.value })} />
             </div>
-            {userModal === 'create' && (
-              <div>
-                <label className="block text-[11.5px] font-semibold text-gray-500 mb-1.5">Temporary Password *</label>
-                <input
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13.5px] outline-none focus:border-blue-600"
-                  type="password"
-                  value={userPassword}
-                  onChange={e => setUserPassword(e.target.value)}
-                  placeholder="At least 6 characters"
-                />
-              </div>
-            )}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[11.5px] font-semibold text-gray-500 mb-1.5">Role</label>

@@ -19,13 +19,6 @@ export function AuthPage() {
     setIsLoading(true);
 
     try {
-      if (mode === 'login' && email.trim().toLowerCase() === 'demo@kdk.local' && password === 'demo123') {
-        localStorage.setItem('kdk-demo-mode', 'true');
-        setIsAuthenticated(true);
-        window.location.reload();
-        return;
-      }
-
       if (mode === 'signup') {
         const { error } = await supabase.auth.signUp({
           email,
@@ -162,12 +155,6 @@ export function AuthPage() {
                     ? 'Enter your credentials to access your workspace.' 
                     : 'Join the modern platform for tax professionals.'}
                 </p>
-
-                {mode === 'login' && (
-                  <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] text-amber-800">
-                    Demo access: `demo@kdk.local` / `demo123`
-                  </div>
-                )}
 
                 <form onSubmit={handleAuth} className="space-y-5">
                   {mode === 'signup' && (
