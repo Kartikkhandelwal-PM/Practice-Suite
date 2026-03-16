@@ -128,6 +128,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .eq('id', session.user.id)
           .single();
 
+        let finalProfile = profile;
         if (error && error.code === 'PGRST116') {
           // Profile not found, create it
           const newProfile = {
@@ -140,33 +141,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
             active: true,
             avatar_url: session.user.user_metadata.avatar_url || `https://ui-avatars.com/api/?name=${session.user.email}&background=random`
           };
-          await supabase.from('profiles').insert(newProfile);
-          setCurrentUser(newProfile);
+          const { error: insertError } = await supabase.from('profiles').insert(newProfile);
+          if (insertError) console.error('Error creating profile:', insertError);
+          finalProfile = newProfile;
         } else if (profile) {
-          setCurrentUser(profile);
+          finalProfile = {
+            ...profile,
+            name: profile.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+            email: profile.email || session.user.email || ''
+          };
         }
 
-        // Fetch all data from Supabase
-        fetchAppData();
+        setCurrentUser(finalProfile);
+        // Fetch all data from Supabase for this user
+        fetchAppData(session.user.id, session.user.email);
       } else {
         setCurrentUser(null);
-        // Reset to initial data or empty
-        setTasks(INIT_TASKS);
-        setClients(INIT_CLIENTS);
-        setUsers(INIT_USERS);
+        setTasks([]);
+        setClients([]);
+        setUsers([]);
+        setDeadlines([]);
+        setTemplates([]);
+        setMeetings([]);
+        setNotes([]);
+        setPasswords([]);
+        setDocs([]);
+        setFolders([]);
+        setEmails([]);
+        setTaskTypes([]);
+        setWorkflows([]);
+        setNotifications([]);
       }
       setIsLoading(false);
     };
 
-    const fetchAppData = async () => {
+    const fetchAppData = async (userId: string, email: string) => {
       try {
         const results = await Promise.all([
-          supabase.from('tasks').select('*'),
+          (supabase.from('tasks').select('*') as any).or(`assigneeId.eq.${userId},reporterId.eq.${userId}`),
           supabase.from('clients').select('*'),
           supabase.from('profiles').select('*'),
           supabase.from('deadlines').select('*'),
           supabase.from('templates').select('*'),
-          supabase.from('meetings').select('*'),
+          (supabase.from('meetings').select('*') as any).contains('attendees', [userId]),
           supabase.from('notes').select('*'),
           supabase.from('passwords').select('*'),
           supabase.from('documents').select('*'),
@@ -174,38 +191,62 @@ export function AppProvider({ children }: { children: ReactNode }) {
           supabase.from('emails').select('*'),
           supabase.from('task_types').select('*'),
           supabase.from('workflows').select('*'),
-          supabase.from('notifications').select('*')
+          supabase.from('notifications').select('*').eq('userId', userId)
         ]) as any[];
 
-        const tasksData = results[0].data;
-        const clientsData = results[1].data;
-        const profilesData = results[2].data;
-        const deadlinesData = results[3].data;
-        const templatesData = results[4].data;
-        const meetingsData = results[5].data;
-        const notesData = results[6].data;
-        const passwordsData = results[7].data;
-        const docsData = results[8].data;
-        const foldersData = results[9].data;
-        const emailsData = results[10].data;
-        const taskTypesData = results[11].data;
-        const workflowsData = results[12].data;
-        const notificationsData = results[13].data;
+        const tasksData = results[0].data || [];
+        const clientsData = results[1].data || [];
+        const profilesData = (results[2].data || []).map((p: any) => ({
+          ...p,
+          name: p.name || p.full_name || p.email?.split('@')[0] || 'User',
+          email: p.email || ''
+        }));
+        const deadlinesData = results[3].data || [];
+        const templatesData = results[4].data || [];
+        const meetingsData = results[5].data || [];
+        const notesData = results[6].data || [];
+        const passwordsData = results[7].data || [];
+        const docsData = results[8].data || [];
+        const foldersData = results[9].data || [];
+        const emailsData = results[10].data || [];
+        const taskTypesData = results[11].data || [];
+        const workflowsData = results[12].data || [];
+        const notificationsData = results[13].data || [];
 
-        if (tasksData && tasksData.length > 0) setTasks(tasksData as any);
-        if (clientsData && clientsData.length > 0) setClients(clientsData as any);
-        if (profilesData && profilesData.length > 0) setUsers(profilesData as any);
-        if (deadlinesData && deadlinesData.length > 0) setDeadlines(deadlinesData as any);
-        if (templatesData && templatesData.length > 0) setTemplates(templatesData as any);
-        if (meetingsData && meetingsData.length > 0) setMeetings(meetingsData as any);
-        if (notesData && notesData.length > 0) setNotes(notesData as any);
-        if (passwordsData && passwordsData.length > 0) setPasswords(passwordsData as any);
-        if (docsData && docsData.length > 0) setDocs(docsData as any);
-        if (foldersData && foldersData.length > 0) setFolders(foldersData as any);
-        if (emailsData && emailsData.length > 0) setEmails(emailsData as any);
-        if (taskTypesData && taskTypesData.length > 0) setTaskTypes(taskTypesData as any);
-        if (workflowsData && workflowsData.length > 0) setWorkflows(workflowsData as any);
-        if (notificationsData && notificationsData.length > 0) setNotifications(notificationsData as any);
+        // Demo Seeding Logic
+        if (email.toLowerCase() === 'kartikkhandelwal1104@gmail.com' && tasksData.length === 0) {
+          console.log('Demo user detected with empty database. Seeding...');
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const seedRes = await fetch('/api/seed-demo', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId, email, token: session?.access_token })
+            });
+            if (seedRes.ok) {
+              // Re-fetch after seeding
+              fetchAppData(userId, email);
+              return;
+            }
+          } catch (seedErr) {
+            console.error('Error triggering demo seed:', seedErr);
+          }
+        }
+
+        setTasks(tasksData);
+        setClients(clientsData);
+        setUsers(profilesData);
+        setDeadlines(deadlinesData);
+        setTemplates(templatesData);
+        setMeetings(meetingsData);
+        setNotes(notesData);
+        setPasswords(passwordsData);
+        setDocs(docsData);
+        setFolders(foldersData);
+        setEmails(emailsData);
+        setTaskTypes(taskTypesData);
+        setWorkflows(workflowsData);
+        setNotifications(notificationsData);
       } catch (err) {
         console.error('Error fetching app data:', err);
       }
@@ -278,8 +319,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addNote = async (note: Note) => {
-    setNotes(prev => [note, ...prev]);
-    const { error } = await supabase.from('notes').insert(note);
+    const noteWithProfile = { ...note, profile_id: currentUser?.id };
+    setNotes(prev => [noteWithProfile, ...prev]);
+    const { error } = await supabase.from('notes').insert(noteWithProfile);
     if (error) throw error;
   };
 
@@ -296,8 +338,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addMeeting = async (meeting: Meeting) => {
-    setMeetings(prev => [meeting, ...prev]);
-    const { error } = await supabase.from('meetings').insert(meeting);
+    const meetingWithProfile = { ...meeting, profile_id: currentUser?.id };
+    setMeetings(prev => [meetingWithProfile, ...prev]);
+    const { error } = await supabase.from('meetings').insert(meetingWithProfile);
     if (error) throw error;
   };
 
@@ -314,8 +357,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addPassword = async (password: Password) => {
-    setPasswords(prev => [password, ...prev]);
-    const { error } = await supabase.from('passwords').insert(password);
+    const passwordWithProfile = { ...password, profile_id: currentUser?.id };
+    setPasswords(prev => [passwordWithProfile, ...prev]);
+    const { error } = await supabase.from('passwords').insert(passwordWithProfile);
     if (error) throw error;
   };
 
@@ -332,8 +376,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addDocument = async (doc: Document) => {
-    setDocs(prev => [doc, ...prev]);
-    const { error } = await supabase.from('documents').insert(doc);
+    const docWithProfile = { ...doc, profile_id: currentUser?.id };
+    setDocs(prev => [docWithProfile, ...prev]);
+    const { error } = await supabase.from('documents').insert(docWithProfile);
     if (error) throw error;
   };
 
@@ -350,8 +395,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addFolder = async (folder: Folder) => {
-    setFolders(prev => [folder, ...prev]);
-    const { error } = await supabase.from('folders').insert(folder);
+    const folderWithProfile = { ...folder, profile_id: currentUser?.id };
+    setFolders(prev => [folderWithProfile, ...prev]);
+    const { error } = await supabase.from('folders').insert(folderWithProfile);
     if (error) throw error;
   };
 
@@ -368,8 +414,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addTaskType = async (taskType: TaskTypeConfig) => {
-    setTaskTypes(prev => [taskType, ...prev]);
-    const { error } = await supabase.from('task_types').insert(taskType);
+    const taskTypeWithProfile = { ...taskType, profile_id: currentUser?.id };
+    setTaskTypes(prev => [taskTypeWithProfile, ...prev]);
+    const { error } = await supabase.from('task_types').insert(taskTypeWithProfile);
     if (error) throw error;
   };
 
@@ -386,8 +433,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addWorkflow = async (workflow: Workflow) => {
-    setWorkflows(prev => [workflow, ...prev]);
-    const { error } = await supabase.from('workflows').insert(workflow);
+    const workflowWithProfile = { ...workflow, profile_id: currentUser?.id };
+    setWorkflows(prev => [workflowWithProfile, ...prev]);
+    const { error } = await supabase.from('workflows').insert(workflowWithProfile);
     if (error) throw error;
   };
 
@@ -404,8 +452,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addDeadline = async (deadline: Deadline) => {
-    setDeadlines(prev => [deadline, ...prev]);
-    const { error } = await supabase.from('deadlines').insert(deadline);
+    const deadlineWithProfile = { ...deadline, profile_id: currentUser?.id };
+    setDeadlines(prev => [deadlineWithProfile, ...prev]);
+    const { error } = await supabase.from('deadlines').insert(deadlineWithProfile);
     if (error) throw error;
   };
 
@@ -422,8 +471,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addTemplate = async (template: Template) => {
-    setTemplates(prev => [template, ...prev]);
-    const { error } = await supabase.from('templates').insert(template);
+    const templateWithProfile = { ...template, profile_id: currentUser?.id };
+    setTemplates(prev => [templateWithProfile, ...prev]);
+    const { error } = await supabase.from('templates').insert(templateWithProfile);
     if (error) throw error;
   };
 
@@ -440,8 +490,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addEmail = async (email: Email) => {
-    setEmails(prev => [email, ...prev]);
-    const { error } = await supabase.from('emails').insert(email);
+    const emailWithProfile = { ...email, profile_id: currentUser?.id };
+    setEmails(prev => [emailWithProfile, ...prev]);
+    const { error } = await supabase.from('emails').insert(emailWithProfile);
     if (error) throw error;
   };
 

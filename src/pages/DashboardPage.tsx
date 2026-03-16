@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { daysLeft, pct, canTransition } from '../utils';
-import { AlertCircle, Zap, Clock, CheckCircle, Calendar as CalendarIcon, Users, ShieldAlert, GitMerge, Plus, ExternalLink, ArrowRight, FileText, UserPlus, Video, LayoutDashboard, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, Zap, Clock, CheckCircle, Calendar as CalendarIcon, Users, ShieldAlert, GitMerge, Plus, ExternalLink, ArrowRight, FileText, UserPlus, Video, LayoutDashboard, CheckCircle2, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TypeChip, StatusBadge } from '../components/ui/Badges';
 import { Avatar } from '../components/ui/Avatar';
@@ -115,6 +115,32 @@ export function DashboardPage() {
           </div>
         }
       />
+
+      {currentUser?.email?.toLowerCase() === 'kartikkhandelwal1104@gmail.com' && (
+        <div className="mb-6 bg-blue-600 rounded-2xl p-6 text-white relative overflow-hidden shadow-xl shadow-blue-200">
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-xl font-bold mb-1 flex items-center gap-2">
+                <Sparkles size={20} /> Demo Environment Active
+              </h3>
+              <p className="text-blue-100 text-[14px]">
+                You are logged in as a demo user. Feel free to explore all features, including AI-powered inbox and task management.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => navigate('/settings')}
+                className="bg-white text-blue-600 px-4 py-2 rounded-lg text-[13px] font-bold hover:bg-blue-50 transition-colors"
+              >
+                Explore Settings
+              </button>
+            </div>
+          </div>
+          {/* Decorative circles */}
+          <div className="absolute top-[-20px] right-[-20px] w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+          <div className="absolute bottom-[-20px] left-[20%] w-24 h-24 bg-blue-400/20 rounded-full blur-xl" />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {stats.map((s, i) => (

@@ -3,7 +3,16 @@ import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI } from "@google/genai";
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+if (!supabaseUrl) {
+  throw new Error('Missing VITE_SUPABASE_URL environment variable.');
+}
+
+if (!supabaseServiceKey) {
+  throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable.');
+}
+
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export const handler: Handler = async (event, context) => {
@@ -49,15 +58,26 @@ export const handler: Handler = async (event, context) => {
 
     // AI Status Route
     if (path === '/ai/status' && method === 'GET') {
-      const key = process.env.CUSTOM_GEMINI_KEY || process.env.GEMINI_API_KEY;
-      const isConfigured = !!key && key !== "AI Studio Free Tier" && key.startsWith('AIza');
+      const custom = process.env.CUSTOM_GEMINI_KEY?.trim();
+      const system = process.env.GEMINI_API_KEY?.trim();
+      let key = null;
+      let source = 'none';
+
+      if (custom && custom.startsWith('AIza') && custom.length > 20) {
+        key = custom;
+        source = 'custom';
+      } else if (system && system.startsWith('AIza') && system.length > 20) {
+        key = system;
+        source = 'system';
+      }
+      
       return { 
         statusCode: 200, 
         headers, 
         body: JSON.stringify({ 
-          configured: isConfigured,
-          model: "gemini-3-flash-preview",
-          key_source: process.env.CUSTOM_GEMINI_KEY ? 'custom' : 'system'
+          configured: !!key,
+          model: "gemini-2.0-flash",
+          key_source: source
         }) 
       };
     }
@@ -65,28 +85,34 @@ export const handler: Handler = async (event, context) => {
     // AI Route
     if (path === '/ai/generate' && method === 'POST') {
       const { prompt, responseSchema } = body;
-      let apiKey = process.env.CUSTOM_GEMINI_KEY || process.env.GEMINI_API_KEY;
-      if (apiKey) apiKey = apiKey.trim();
-      
-      // Ignore the placeholder string if it's passed literally
-      if (apiKey === "AI Studio Free Tier" || !apiKey?.startsWith('AIza')) {
-        apiKey = process.env.CUSTOM_GEMINI_KEY?.trim();
-      }
+      const custom = process.env.CUSTOM_GEMINI_KEY?.trim();
+      const system = process.env.GEMINI_API_KEY?.trim();
+      let apiKey = null;
+      let source = 'none';
 
-      console.log('AI Request (Netlify) received. Key found:', !!apiKey);
-      if (apiKey) {
-        console.log('Key starts with:', apiKey.substring(0, 8), '... length:', apiKey.length);
+      if (custom && custom.startsWith('AIza') && custom.length > 20) {
+        apiKey = custom;
+        source = 'custom';
+      } else if (system && system.startsWith('AIza') && system.length > 20) {
+        apiKey = system;
+        source = 'system';
       }
 
       if (!apiKey) {
-        return { statusCode: 500, headers, body: JSON.stringify({ error: 'Gemini API key not configured' }) };
+        return { 
+          statusCode: 500, 
+          headers, 
+          body: JSON.stringify({ 
+            error: 'Gemini API key not configured. Please add CUSTOM_GEMINI_KEY to your environment variables in AI Studio settings.' 
+          }) 
+        };
       }
       
       try {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          model: "gemini-2.0-flash",
+          contents: prompt,
           config: {
             responseMimeType: "application/json",
             responseSchema: responseSchema
@@ -94,12 +120,16 @@ export const handler: Handler = async (event, context) => {
         });
         return { statusCode: 200, headers, body: JSON.stringify({ text: response.text }) };
       } catch (error: any) {
-        console.error('Gemini Error:', error);
-        let errorMessage = error.message;
-        if (errorMessage.includes('API key not valid')) {
-          errorMessage = 'The Gemini API key provided is invalid. Please update it in the application settings.';
-        }
-        return { statusCode: 500, headers, body: JSON.stringify({ error: errorMessage }) };
+        console.error(`Gemini Error (${source}):`, error);
+        const isQuotaError = error.message?.includes('429') || error.message?.includes('quota');
+        return { 
+          statusCode: isQuotaError ? 429 : 500, 
+          headers, 
+          body: JSON.stringify({ 
+            error: isQuotaError ? "AI Quota Exceeded. Please wait a minute or provide a different API key in settings." : error.message,
+            details: error.message
+          }) 
+        };
       }
     }
 
