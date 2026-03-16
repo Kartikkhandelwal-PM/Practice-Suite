@@ -192,23 +192,39 @@ async function startServer() {
   });
 
   // Gemini AI Route
+  app.get('/api/ai/status', (req, res) => {
+    res.json({ 
+      configured: !!process.env.GEMINI_API_KEY,
+      model: "gemini-3-flash-preview"
+    });
+  });
+
   app.post('/api/ai/generate', async (req, res) => {
     const { prompt, responseSchema } = req.body;
-    if (!process.env.GEMINI_API_KEY) {
+    const apiKey = process.env.CUSTOM_GEMINI_KEY || process.env.GEMINI_API_KEY;
+    
+    if (!apiKey) {
       return res.status(500).json({ error: 'Gemini API key not configured' });
     }
     try {
+      const ai = new GoogleGenAI({ apiKey: apiKey as string });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: prompt,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
           responseSchema: responseSchema
         }
       });
+      console.log('Gemini Response:', response.text);
       res.json({ text: response.text });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error('Gemini Error:', error);
+      let errorMessage = error.message;
+      if (errorMessage.includes('API key not valid')) {
+        errorMessage = 'The Gemini API key provided is invalid. Please update it in the application settings.';
+      }
+      res.status(500).json({ error: errorMessage });
     }
   });
 

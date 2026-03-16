@@ -7,6 +7,16 @@ export interface EmailSummary {
   suggestedReply: string;
 }
 
+export const checkAiStatus = async (): Promise<{ configured: boolean, model: string }> => {
+  try {
+    const res = await fetch(`${API_BASE}/status`);
+    return await res.json();
+  } catch (error) {
+    console.error("Error checking AI status:", error);
+    return { configured: false, model: "unknown" };
+  }
+};
+
 export const summarizeEmail = async (subject: string, body: string, senderName: string, userName: string): Promise<EmailSummary> => {
   try {
     const prompt = `Analyze the following email and provide a summary, action steps, and a suggested professional reply.
@@ -45,15 +55,26 @@ Do not include any extra conversational text or markdown code blocks outside the
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    return JSON.parse(data.text || "{}") as EmailSummary;
+    if (!res.ok) {
+      console.error("AI API Error:", data);
+      throw new Error(data.error || "Failed to generate AI response");
+    }
+    
+    if (!data.text) {
+      console.error("AI API returned empty text");
+      throw new Error("Empty AI response");
+    }
+
+    return JSON.parse(data.text) as EmailSummary;
   } catch (error) {
     console.error("Error summarizing email:", error);
+    const firstName = (senderName || 'Sender').split(' ')[0];
+    const userFirstName = (userName || 'User').split(' ')[0];
     return {
-      title: `Follow up: ${subject}`,
-      overview: "Failed to generate AI summary.",
+      title: `Follow up: ${subject || 'Email'}`,
+      overview: "AI summary unavailable. Please ensure a valid Gemini API key is set in the application settings.",
       steps: ["Review email and take necessary action."],
-      suggestedReply: `Dear ${senderName.split(' ')[0]},\n\nThank you for your email. I have received it and will get back to you shortly.\n\nRegards,\n${userName.split(' ')[0]}`
+      suggestedReply: `Dear ${firstName},\n\nThank you for your email. I have received it and will get back to you shortly.\n\nRegards,\n${userFirstName}`
     };
   }
 };
@@ -81,8 +102,17 @@ export const improveDraft = async (subject: string, body: string): Promise<{ sub
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    return JSON.parse(data.text || "{}");
+    if (!res.ok) {
+      console.error("AI API Error (Draft):", data);
+      throw new Error(data.error || "Failed to improve draft");
+    }
+    
+    if (!data.text) {
+      console.error("AI API returned empty text (Draft)");
+      throw new Error("Empty AI response");
+    }
+
+    return JSON.parse(data.text);
   } catch (error) {
     console.error("Error improving draft:", error);
     return { subject, body };

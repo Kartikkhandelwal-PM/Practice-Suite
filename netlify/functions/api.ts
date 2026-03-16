@@ -51,15 +51,30 @@ export const handler: Handler = async (event, context) => {
     // AI Route
     if (path === '/ai/generate' && method === 'POST') {
       const { prompt, responseSchema } = body;
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: responseSchema
+      const apiKey = process.env.CUSTOM_GEMINI_KEY || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return { statusCode: 500, headers, body: JSON.stringify({ error: 'Gemini API key not configured' }) };
+      }
+      
+      try {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: responseSchema
+          }
+        });
+        return { statusCode: 200, headers, body: JSON.stringify({ text: response.text }) };
+      } catch (error: any) {
+        console.error('Gemini Error:', error);
+        let errorMessage = error.message;
+        if (errorMessage.includes('API key not valid')) {
+          errorMessage = 'The Gemini API key provided is invalid. Please update it in the application settings.';
         }
-      });
-      return { statusCode: 200, headers, body: JSON.stringify({ text: response.text }) };
+        return { statusCode: 500, headers, body: JSON.stringify({ error: errorMessage }) };
+      }
     }
 
     // Data Routes (Generic Proxy)

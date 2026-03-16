@@ -79,6 +79,13 @@ export function InboxPage() {
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
   const [emailSummary, setEmailSummary] = useState<EmailSummary | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [aiConfigured, setAiConfigured] = useState(true);
+
+  React.useEffect(() => {
+    import('../services/geminiService').then(m => {
+      m.checkAiStatus().then(status => setAiConfigured(status.configured));
+    });
+  }, []);
 
   React.useEffect(() => {
     if (selectedEmail && currentFolder === 'inbox') {
