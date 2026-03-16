@@ -1,0 +1,23 @@
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE deadlines ADD COLUMN IF NOT EXISTS profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE templates ADD COLUMN IF NOT EXISTS profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE passwords ADD COLUMN IF NOT EXISTS profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE folders ADD COLUMN IF NOT EXISTS profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE task_types ADD COLUMN IF NOT EXISTS profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE;
+ALTER TABLE workflows ADD COLUMN IF NOT EXISTS profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_clients_profile_id ON clients(profile_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_profile_id ON tasks(profile_id);
+CREATE INDEX IF NOT EXISTS idx_deadlines_profile_id ON deadlines(profile_id);
+CREATE INDEX IF NOT EXISTS idx_templates_profile_id ON templates(profile_id);
+CREATE INDEX IF NOT EXISTS idx_emails_profile_id ON emails(profile_id);
+CREATE INDEX IF NOT EXISTS idx_passwords_profile_id ON passwords(profile_id);
+CREATE INDEX IF NOT EXISTS idx_folders_profile_id ON folders(profile_id);
+CREATE INDEX IF NOT EXISTS idx_documents_profile_id ON documents(profile_id);
+CREATE INDEX IF NOT EXISTS idx_meetings_profile_id ON meetings(profile_id);
+CREATE INDEX IF NOT EXISTS idx_task_types_profile_id ON task_types(profile_id);
+CREATE INDEX IF NOT EXISTS idx_workflows_profile_id ON workflows(profile_id);

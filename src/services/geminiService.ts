@@ -1,4 +1,4 @@
-const API_BASE = '/api/ai';
+import { aiApi } from '../lib/api';
 
 export interface EmailSummary {
   title: string;
@@ -9,8 +9,7 @@ export interface EmailSummary {
 
 export const checkAiStatus = async (): Promise<{ configured: boolean, model: string, key_source?: string }> => {
   try {
-    const res = await fetch(`${API_BASE}/status`);
-    return await res.json();
+    return await aiApi.status();
   } catch (error) {
     console.error("Error checking AI status:", error);
     return { configured: false, model: "unknown" };
@@ -33,32 +32,19 @@ Return a JSON object with the following keys:
 
 Do not include any extra conversational text or markdown code blocks outside the JSON.`;
 
-    const res = await fetch(`${API_BASE}/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt,
-        responseSchema: {
-          type: 'OBJECT',
-          properties: {
-            title: { type: 'STRING' },
-            overview: { type: 'STRING' },
-            steps: {
-              type: 'ARRAY',
-              items: { type: 'STRING' }
-            },
-            suggestedReply: { type: 'STRING' }
-          },
-          required: ["title", "overview", "steps", "suggestedReply"]
-        }
-      })
+    const data = await aiApi.generate(prompt, {
+      type: 'OBJECT',
+      properties: {
+        title: { type: 'STRING' },
+        overview: { type: 'STRING' },
+        steps: {
+          type: 'ARRAY',
+          items: { type: 'STRING' }
+        },
+        suggestedReply: { type: 'STRING' }
+      },
+      required: ["title", "overview", "steps", "suggestedReply"]
     });
-
-    const data = await res.json();
-    if (!res.ok) {
-      console.error("AI API Error:", data);
-      throw new Error(data.error || "Failed to generate AI response");
-    }
     
     if (!data.text) {
       console.error("AI API returned empty text");
@@ -96,27 +82,14 @@ export const improveDraft = async (subject: string, body: string): Promise<{ sub
       ? `Please rephrase and improve the following email draft to be more professional and clear. Return a JSON object with two keys: "subject" (a concise, professional subject line) and "body" (the improved email body in HTML format, using <p>, <br>, <strong> etc. for formatting). Do not include any extra conversational text or markdown code blocks outside the JSON.\n\nOriginal Subject: ${subject}\nOriginal Body: ${body}`
       : `Please write a professional email draft based on the subject: "${subject}". Return a JSON object with two keys: "subject" (a concise, professional subject line) and "body" (the email body in HTML format, using <p>, <br>, <strong> etc. for formatting). Do not include any extra conversational text or markdown code blocks outside the JSON.`;
 
-    const res = await fetch(`${API_BASE}/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt,
-        responseSchema: {
-          type: 'OBJECT',
-          properties: {
-            subject: { type: 'STRING' },
-            body: { type: 'STRING' }
-          },
-          required: ["subject", "body"]
-        }
-      })
+    const data = await aiApi.generate(prompt, {
+      type: 'OBJECT',
+      properties: {
+        subject: { type: 'STRING' },
+        body: { type: 'STRING' }
+      },
+      required: ["subject", "body"]
     });
-
-    const data = await res.json();
-    if (!res.ok) {
-      console.error("AI API Error (Draft):", data);
-      throw new Error(data.error || "Failed to improve draft");
-    }
     
     if (!data.text) {
       console.error("AI API returned empty text (Draft)");

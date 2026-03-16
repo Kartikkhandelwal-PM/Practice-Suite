@@ -9,7 +9,7 @@ import { genUUID } from '../utils';
 import { Modal } from '../components/ui/Modal';
 import { Avatar } from '../components/ui/Avatar';
 import { IconRenderer } from '../components/ui/IconRenderer';
-import { supabase } from '../lib/supabase';
+import { authApi } from '../lib/api';
 
 export function SettingsPage() {
   const { users, taskTypes, workflows, setIsAuthenticated, updateUser, addUser, deleteUser, updateTaskType, addTaskType, deleteTaskType, updateWorkflow, addWorkflow, deleteWorkflow } = useApp();
@@ -18,13 +18,9 @@ export function SettingsPage() {
 
   const handleLogout = async () => {
     if (await confirm({ title: 'Logout', message: 'Are you sure you want to logout?', danger: true })) {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        toast(error.message, 'error');
-      } else {
-        setIsAuthenticated(false);
-        toast('Logged out successfully', 'success');
-      }
+      authApi.logout();
+      setIsAuthenticated(false);
+      toast('Logged out successfully', 'success');
     }
   };
 

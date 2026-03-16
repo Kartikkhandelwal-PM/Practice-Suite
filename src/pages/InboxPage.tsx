@@ -79,7 +79,6 @@ export function InboxPage() {
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
   const [emailSummary, setEmailSummary] = useState<EmailSummary | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
   const [aiError, setAiError] = useState<string | null>(null);
 
   const fetchSummary = async () => {
@@ -110,8 +109,9 @@ export function InboxPage() {
   };
 
   React.useEffect(() => {
-    fetchSummary();
-  }, [selectedEmail, currentFolder, currentUser, retryCount]);
+    setEmailSummary(null);
+    setAiError(null);
+  }, [selectedEmail?.id, currentFolder]);
 
   const openCompose = (type: 'compose' | 'reply' | 'forward', email?: Email | null, draftBody?: string) => {
     setComposeModal({ isOpen: true, type, email });
@@ -476,6 +476,13 @@ export function InboxPage() {
                         <div className="flex items-center gap-2 text-[14px] font-bold text-[#d9534f]">
                           <Bot size={18} /> AI Summary & Suggested Reply
                         </div>
+                        <button
+                          onClick={fetchSummary}
+                          disabled={isSummarizing}
+                          className="bg-white border border-orange-200 text-[#d9534f] px-3 py-1.5 rounded-lg text-[12px] font-semibold hover:bg-orange-50 transition-colors disabled:opacity-50"
+                        >
+                          {emailSummary ? 'Refresh Summary' : 'Generate Summary'}
+                        </button>
                       </div>
                       {isSummarizing ? (
                         <div className="flex items-center gap-2 text-[14px] text-gray-500 animate-pulse">
@@ -507,7 +514,7 @@ export function InboxPage() {
                               <Reply size={16} /> Use this draft
                             </button>
                             <button 
-                              onClick={() => setRetryCount(prev => prev + 1)}
+                              onClick={fetchSummary}
                               className="text-gray-500 text-[13px] font-medium hover:text-gray-700 flex items-center gap-1.5 transition-colors"
                             >
                               <Settings size={14} /> Regenerate
@@ -524,7 +531,7 @@ export function InboxPage() {
                             {aiError}
                           </div>
                           <button 
-                            onClick={() => setRetryCount(prev => prev + 1)}
+                            onClick={fetchSummary}
                             className="bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg text-[13px] font-bold hover:bg-red-50 w-fit shadow-sm transition-all mt-2"
                           >
                             Try again
@@ -534,7 +541,7 @@ export function InboxPage() {
                         <div className="flex flex-col gap-3">
                           <div className="text-[14px] text-gray-500">Could not generate AI insights for this email.</div>
                           <button 
-                            onClick={() => setRetryCount(prev => prev + 1)}
+                            onClick={fetchSummary}
                             className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-[13px] font-bold hover:bg-gray-50 w-fit shadow-sm transition-all"
                           >
                             Try again
