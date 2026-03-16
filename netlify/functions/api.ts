@@ -5,7 +5,6 @@ import { GoogleGenAI } from "@google/genai";
 const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 export const handler: Handler = async (event, context) => {
   const path = event.path.replace('/.netlify/functions/api', '').replace('/api', '');
@@ -46,6 +45,21 @@ export const handler: Handler = async (event, context) => {
     if (path === '/auth/session' && method === 'GET') {
       const { data, error } = await supabase.auth.getSession();
       return { statusCode: 200, headers, body: JSON.stringify({ session: data.session, error }) };
+    }
+
+    // AI Status Route
+    if (path === '/ai/status' && method === 'GET') {
+      const key = process.env.CUSTOM_GEMINI_KEY || process.env.GEMINI_API_KEY;
+      const isConfigured = !!key && key !== "AI Studio Free Tier" && key.startsWith('AIza');
+      return { 
+        statusCode: 200, 
+        headers, 
+        body: JSON.stringify({ 
+          configured: isConfigured,
+          model: "gemini-3-flash-preview",
+          key_source: process.env.CUSTOM_GEMINI_KEY ? 'custom' : 'system'
+        }) 
+      };
     }
 
     // AI Route

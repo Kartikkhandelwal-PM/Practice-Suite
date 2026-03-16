@@ -7,7 +7,7 @@ export interface EmailSummary {
   suggestedReply: string;
 }
 
-export const checkAiStatus = async (): Promise<{ configured: boolean, model: string }> => {
+export const checkAiStatus = async (): Promise<{ configured: boolean, model: string, key_source?: string }> => {
   try {
     const res = await fetch(`${API_BASE}/status`);
     return await res.json();

@@ -79,32 +79,36 @@ export function InboxPage() {
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
   const [emailSummary, setEmailSummary] = useState<EmailSummary | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
-  const [aiConfigured, setAiConfigured] = useState(true);
+  const [aiStatus, setAiStatus] = useState<{ configured: boolean, model: string, key_source?: string } | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   React.useEffect(() => {
     import('../services/geminiService').then(m => {
-      m.checkAiStatus().then(status => setAiConfigured(status.configured));
+      m.checkAiStatus().then(status => setAiStatus(status));
     });
   }, []);
 
-  React.useEffect(() => {
-    if (selectedEmail && currentFolder === 'inbox') {
-      const fetchSummary = async () => {
-        setIsSummarizing(true);
-        const summary = await summarizeEmail(
-          selectedEmail.subject,
-          selectedEmail.body,
-          selectedEmail.from,
-          currentUser?.name || 'User'
-        );
-        setEmailSummary(summary);
-        setIsSummarizing(false);
-      };
-      fetchSummary();
-    } else {
-      setEmailSummary(null);
+  const fetchSummary = async () => {
+    if (!selectedEmail || currentFolder !== 'inbox') return;
+    setIsSummarizing(true);
+    try {
+      const summary = await summarizeEmail(
+        selectedEmail.subject,
+        selectedEmail.body,
+        selectedEmail.from,
+        currentUser?.name || 'User'
+      );
+      setEmailSummary(summary);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSummarizing(false);
     }
-  }, [selectedEmail, currentFolder, currentUser]);
+  };
+
+  React.useEffect(() => {
+    fetchSummary();
+  }, [selectedEmail, currentFolder, currentUser, retryCount]);
 
   const openCompose = (type: 'compose' | 'reply' | 'forward', email?: Email | null, draftBody?: string) => {
     setComposeModal({ isOpen: true, type, email });
@@ -464,8 +468,15 @@ export function InboxPage() {
                 {/* AI Suggestion Box at the bottom of the email body */}
                 {currentFolder === 'inbox' && (
                   <div className="mt-8 bg-orange-50/50 border border-orange-100 rounded-lg p-4">
-                    <div className="flex items-center gap-2 text-[13px] font-bold text-[#d9534f] mb-2">
-                      <Bot size={16} /> AI Summary & Suggested Reply
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 text-[13px] font-bold text-[#d9534f]">
+                        <Bot size={16} /> AI Summary & Suggested Reply
+                      </div>
+                      {aiStatus && (
+                        <div className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${aiStatus.configured ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {aiStatus.configured ? `AI Active (${aiStatus.key_source})` : 'AI Inactive'}
+                        </div>
+                      )}
                     </div>
                     {isSummarizing ? (
                       <div className="flex items-center gap-2 text-[13px] text-gray-500 animate-pulse">
@@ -480,15 +491,31 @@ export function InboxPage() {
                         <div className="bg-white border border-orange-100 rounded p-3 text-[13px] text-gray-600 italic">
                           {emailSummary.suggestedReply}
                         </div>
-                        <button 
-                          onClick={() => openCompose('reply', selectedEmail, emailSummary.suggestedReply)}
-                          className="mt-3 text-[#d9534f] text-[13px] font-medium hover:underline flex items-center gap-1"
-                        >
-                          <Reply size={14} /> Use this draft to reply
-                        </button>
+                        <div className="mt-3 flex items-center gap-4">
+                          <button 
+                            onClick={() => openCompose('reply', selectedEmail, emailSummary.suggestedReply)}
+                            className="text-[#d9534f] text-[13px] font-medium hover:underline flex items-center gap-1"
+                          >
+                            <Reply size={14} /> Use this draft to reply
+                          </button>
+                          <button 
+                            onClick={() => setRetryCount(prev => prev + 1)}
+                            className="text-gray-500 text-[12px] hover:underline flex items-center gap-1"
+                          >
+                            <Settings size={12} /> Regenerate
+                          </button>
+                        </div>
                       </>
                     ) : (
-                      <div className="text-[13px] text-gray-500">Failed to generate summary.</div>
+                      <div className="flex flex-col gap-2">
+                        <div className="text-[13px] text-gray-500">Failed to generate summary.</div>
+                        <button 
+                          onClick={() => setRetryCount(prev => prev + 1)}
+                          className="text-[#d9534f] text-[12px] font-medium hover:underline w-fit"
+                        >
+                          Try again
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
