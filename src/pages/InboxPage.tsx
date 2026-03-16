@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
-import { Search, Filter, Plus, Calendar, Reply, Forward, Paperclip, Link as LinkIcon, Settings, Bot, CheckCircle2, Mail, X, Send, Inbox, Send as SendIcon, FileText, Trash2 } from 'lucide-react';
+import { Search, Filter, Plus, Calendar, Reply, Forward, Paperclip, Link as LinkIcon, Settings, Bot, CheckCircle2, Mail, X, Send, Inbox, Send as SendIcon, FileText, Trash2, AlertCircle } from 'lucide-react';
 import { Email } from '../types';
 import { TaskModal } from '../components/ui/TaskModal';
 import { genUUID, fmt, today } from '../utils';
@@ -79,18 +79,13 @@ export function InboxPage() {
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
   const [emailSummary, setEmailSummary] = useState<EmailSummary | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
-  const [aiStatus, setAiStatus] = useState<{ configured: boolean, model: string, key_source?: string } | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-
-  React.useEffect(() => {
-    import('../services/geminiService').then(m => {
-      m.checkAiStatus().then(status => setAiStatus(status));
-    });
-  }, []);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const fetchSummary = async () => {
     if (!selectedEmail || currentFolder !== 'inbox') return;
     setIsSummarizing(true);
+    setAiError(null);
     try {
       const summary = await summarizeEmail(
         selectedEmail.subject,
@@ -98,9 +93,17 @@ export function InboxPage() {
         selectedEmail.from,
         currentUser?.name || 'User'
       );
-      setEmailSummary(summary);
-    } catch (err) {
+      
+      // Check if the summary returned is actually an error fallback
+      if (summary.overview.includes('Quota Exceeded') || summary.overview.includes('limit has been reached')) {
+        setAiError(summary.overview);
+        setEmailSummary(null);
+      } else {
+        setEmailSummary(summary);
+      }
+    } catch (err: any) {
       console.error(err);
+      setAiError(err.message || "Failed to generate AI insights.");
     } finally {
       setIsSummarizing(false);
     }
@@ -459,66 +462,88 @@ export function InboxPage() {
                 </div>
               </div>
               
-              <div className="flex-1 overflow-y-auto p-6 custom-scrollbar flex flex-col">
-                <div 
-                  className="text-[14px] text-gray-800 leading-relaxed flex-1 prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: selectedEmail.body.includes('<') ? selectedEmail.body : selectedEmail.body.replace(/\n/g, '<br>') }}
-                />
-                
-                {/* AI Suggestion Box at the bottom of the email body */}
-                {currentFolder === 'inbox' && (
-                  <div className="mt-8 bg-orange-50/50 border border-orange-100 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2 text-[13px] font-bold text-[#d9534f]">
-                        <Bot size={16} /> AI Summary & Suggested Reply
+              <div className="flex-1 overflow-y-auto p-4 lg:p-8 bg-gray-50/30 custom-scrollbar flex flex-col items-center">
+                <div className="w-full max-w-4xl bg-white p-6 lg:p-10 rounded-xl shadow-sm border border-gray-100 min-h-full flex flex-col">
+                  <div 
+                    className="text-[14px] lg:text-[15px] text-gray-800 leading-relaxed flex-1 prose prose-sm lg:prose-base max-w-none"
+                    dangerouslySetInnerHTML={{ __html: selectedEmail.body.includes('<') ? selectedEmail.body : selectedEmail.body.replace(/\n/g, '<br>') }}
+                  />
+                  
+                  {/* AI Suggestion Box at the bottom of the email body */}
+                  {currentFolder === 'inbox' && (
+                    <div className="mt-12 bg-orange-50/50 border border-orange-100 rounded-xl p-5 lg:p-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2 text-[14px] font-bold text-[#d9534f]">
+                          <Bot size={18} /> AI Summary & Suggested Reply
+                        </div>
                       </div>
-                      {aiStatus && (
-                        <div className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${aiStatus.configured ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {aiStatus.configured ? `AI Active (${aiStatus.key_source})` : 'AI Inactive'}
+                      {isSummarizing ? (
+                        <div className="flex items-center gap-2 text-[14px] text-gray-500 animate-pulse">
+                          <div className="w-4 h-4 rounded-full border-2 border-orange-400 border-t-transparent animate-spin" />
+                          Analyzing email content...
+                        </div>
+                      ) : emailSummary ? (
+                        <>
+                          <div className="text-[14px] text-gray-700 leading-relaxed mb-4">
+                            <div className="bg-white/50 p-3 rounded-lg border border-orange-100/50">
+                              <strong className="text-[#d9534f] text-[12px] uppercase tracking-wider block mb-1">Executive Summary</strong>
+                              {emailSummary.overview}
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-3">
+                            <strong className="text-[#d9534f] text-[12px] uppercase tracking-wider block">Suggested Response</strong>
+                            <div 
+                              className="bg-white border border-orange-100 rounded-lg p-4 text-[14px] text-gray-700 italic prose prose-sm max-w-none shadow-sm"
+                              dangerouslySetInnerHTML={{ __html: emailSummary.suggestedReply.includes('<') ? emailSummary.suggestedReply : emailSummary.suggestedReply.replace(/\n/g, '<br>') }}
+                            />
+                          </div>
+
+                          <div className="mt-4 flex items-center gap-4 border-t border-orange-100 pt-4">
+                            <button 
+                              onClick={() => openCompose('reply', selectedEmail, emailSummary.suggestedReply)}
+                              className="bg-[#d9534f] text-white px-4 py-2 rounded-lg text-[13px] font-bold hover:bg-[#c9302c] flex items-center gap-2 transition-all shadow-sm"
+                            >
+                              <Reply size={16} /> Use this draft
+                            </button>
+                            <button 
+                              onClick={() => setRetryCount(prev => prev + 1)}
+                              className="text-gray-500 text-[13px] font-medium hover:text-gray-700 flex items-center gap-1.5 transition-colors"
+                            >
+                              <Settings size={14} /> Regenerate
+                            </button>
+                          </div>
+                        </>
+                      ) : aiError ? (
+                        <div className="flex flex-col gap-3 p-4 bg-red-50 border border-red-100 rounded-xl">
+                          <div className="flex items-center gap-2 text-red-600 font-bold text-[14px]">
+                            <AlertCircle size={18} />
+                            AI Quota Exceeded
+                          </div>
+                          <div className="text-[13px] text-red-700 leading-relaxed">
+                            {aiError}
+                          </div>
+                          <button 
+                            onClick={() => setRetryCount(prev => prev + 1)}
+                            className="bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg text-[13px] font-bold hover:bg-red-50 w-fit shadow-sm transition-all mt-2"
+                          >
+                            Try again
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-3">
+                          <div className="text-[14px] text-gray-500">Could not generate AI insights for this email.</div>
+                          <button 
+                            onClick={() => setRetryCount(prev => prev + 1)}
+                            className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-[13px] font-bold hover:bg-gray-50 w-fit shadow-sm transition-all"
+                          >
+                            Try again
+                          </button>
                         </div>
                       )}
                     </div>
-                    {isSummarizing ? (
-                      <div className="flex items-center gap-2 text-[13px] text-gray-500 animate-pulse">
-                        <div className="w-4 h-4 rounded-full border-2 border-orange-400 border-t-transparent animate-spin" />
-                        Generating AI summary...
-                      </div>
-                    ) : emailSummary ? (
-                      <>
-                        <div className="text-[13px] text-gray-700 leading-relaxed mb-3">
-                          <strong>Summary:</strong> {emailSummary.overview}
-                        </div>
-                        <div className="bg-white border border-orange-100 rounded p-3 text-[13px] text-gray-600 italic">
-                          {emailSummary.suggestedReply}
-                        </div>
-                        <div className="mt-3 flex items-center gap-4">
-                          <button 
-                            onClick={() => openCompose('reply', selectedEmail, emailSummary.suggestedReply)}
-                            className="text-[#d9534f] text-[13px] font-medium hover:underline flex items-center gap-1"
-                          >
-                            <Reply size={14} /> Use this draft to reply
-                          </button>
-                          <button 
-                            onClick={() => setRetryCount(prev => prev + 1)}
-                            className="text-gray-500 text-[12px] hover:underline flex items-center gap-1"
-                          >
-                            <Settings size={12} /> Regenerate
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        <div className="text-[13px] text-gray-500">Failed to generate summary.</div>
-                        <button 
-                          onClick={() => setRetryCount(prev => prev + 1)}
-                          className="text-[#d9534f] text-[12px] font-medium hover:underline w-fit"
-                        >
-                          Try again
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </>
           ) : (
