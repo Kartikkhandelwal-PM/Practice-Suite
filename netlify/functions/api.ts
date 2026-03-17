@@ -24,6 +24,18 @@ export const handler: Handler = async (event, context) => {
   }
 
   try {
+    // Config Route
+    if (path === '/config' && method === 'GET') {
+      return { 
+        statusCode: 200, 
+        headers, 
+        body: JSON.stringify({ 
+          supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
+          supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+        }) 
+      };
+    }
+
     // Auth Routes
     if (path === '/auth/login' && method === 'POST') {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -43,8 +55,14 @@ export const handler: Handler = async (event, context) => {
     }
 
     if (path === '/auth/session' && method === 'GET') {
-      const { data, error } = await supabase.auth.getSession();
-      return { statusCode: 200, headers, body: JSON.stringify({ session: data.session, error }) };
+      const authHeader = event.headers.authorization;
+      if (!authHeader) return { statusCode: 401, headers, body: JSON.stringify({ error: 'No token provided' }) };
+      
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      if (error) return { statusCode: 401, headers, body: JSON.stringify({ error }) };
+      
+      return { statusCode: 200, headers, body: JSON.stringify({ user, error: null }) };
     }
 
     // AI Status Route
@@ -129,9 +147,24 @@ export const handler: Handler = async (event, context) => {
     if (dataMatch) {
       const table = dataMatch[1];
       const id = dataMatch[2];
+      const queryParams = event.queryStringParameters || {};
 
       if (method === 'GET') {
-        const { data, error } = await supabase.from(table).select('*');
+        let query = supabase.from(table).select(queryParams.select || '*');
+        
+        // Handle basic filters
+        Object.entries(queryParams).forEach(([key, value]) => {
+          if (key === 'select') return;
+          if (typeof value === 'string' && value.startsWith('eq.')) {
+            query = query.eq(key, value.substring(3));
+          } else if (typeof value === 'string' && value.startsWith('cs.')) {
+            try {
+              query = query.contains(key, JSON.parse(value.substring(3)));
+            } catch (e) {}
+          }
+        });
+
+        const { data, error } = await query;
         return { statusCode: error ? 400 : 200, headers, body: JSON.stringify(data || { error }) };
       }
 

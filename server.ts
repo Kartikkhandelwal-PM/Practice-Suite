@@ -11,8 +11,8 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey;
 
 if (!supabaseUrl || !supabaseAnonKey) {
@@ -194,7 +194,7 @@ async function startServer() {
         options: {
           data: {
             full_name: 'Demo User',
-            avatar_url: 'https://ui-avatars.com/api/?name=Demo+User&background=0D8ABC&color=fff'
+            avatarUrl: 'https://ui-avatars.com/api/?name=Demo+User&background=0D8ABC&color=fff'
           }
         }
       });
@@ -227,7 +227,23 @@ async function startServer() {
   // Data Routes
   app.get('/api/data/:table', async (req, res) => {
     const { table } = req.params;
-    const { data, error } = await supabase.from(table).select('*');
+    const queryParams = req.query;
+    
+    let query = supabase.from(table).select((queryParams.select as string) || '*');
+    
+    // Handle basic filters
+    Object.entries(queryParams).forEach(([key, value]) => {
+      if (key === 'select') return;
+      if (typeof value === 'string' && value.startsWith('eq.')) {
+        query = query.eq(key, value.substring(3));
+      } else if (typeof value === 'string' && value.startsWith('cs.')) {
+        try {
+          query = query.contains(key, JSON.parse(value.substring(3)));
+        } catch (e) {}
+      }
+    });
+
+    const { data, error } = await query;
     if (error) return res.status(400).json({ error });
     res.json(data);
   });
