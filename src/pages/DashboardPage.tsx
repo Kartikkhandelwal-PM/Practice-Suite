@@ -49,7 +49,7 @@ export function DashboardPage() {
   };
 
   const filteredTasks = tasks.filter(t => {
-    if (currentUser?.role === 'admin') return true;
+    if (currentUser?.role?.toLowerCase() === 'admin') return true;
     return t.assigneeId === currentUser?.id || t.reviewerId === currentUser?.id;
   });
 

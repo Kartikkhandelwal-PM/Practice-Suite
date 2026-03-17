@@ -8,8 +8,8 @@ CREATE TABLE profiles (
   designation TEXT,
   color TEXT DEFAULT '#2563eb',
   active BOOLEAN DEFAULT true,
-  avatar_url TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  avatarUrl TEXT,
+  createdAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Create clients table
@@ -26,7 +26,7 @@ CREATE TABLE clients (
   address TEXT,
   onboarded DATE DEFAULT CURRENT_DATE,
   active BOOLEAN DEFAULT true,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  createdAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Create workflows table
@@ -36,7 +36,7 @@ CREATE TABLE workflows (
   description TEXT,
   statuses TEXT[] NOT NULL,
   transitions JSONB NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  createdAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Create task_types table
@@ -46,32 +46,32 @@ CREATE TABLE task_types (
   icon TEXT NOT NULL,
   color TEXT NOT NULL,
   description TEXT,
-  workflow_id UUID REFERENCES workflows(id),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  workflowId UUID REFERENCES workflows(id),
+  createdAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Create tasks table
 CREATE TABLE tasks (
   id TEXT PRIMARY KEY, -- Using KDK-1 style IDs or UUIDs
   title TEXT NOT NULL,
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+  clientId UUID REFERENCES clients(id) ON DELETE CASCADE,
   type TEXT,
-  issue_type TEXT,
+  issueType TEXT,
   status TEXT NOT NULL,
   priority TEXT NOT NULL,
-  assignee_id UUID REFERENCES profiles(id),
-  reviewer_id UUID REFERENCES profiles(id),
-  reporter_id UUID REFERENCES profiles(id),
-  due_date DATE,
+  assigneeId UUID REFERENCES profiles(id),
+  reviewerId UUID REFERENCES profiles(id),
+  reporterId UUID REFERENCES profiles(id),
+  dueDate DATE,
   recurring TEXT,
   description TEXT,
   tags TEXT[],
-  parent_id TEXT REFERENCES tasks(id),
+  parentId TEXT REFERENCES tasks(id),
   subtasks JSONB DEFAULT '[]'::jsonb,
   comments JSONB DEFAULT '[]'::jsonb,
   attachments JSONB DEFAULT '[]'::jsonb,
   activity JSONB DEFAULT '[]'::jsonb,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  createdAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Create deadlines table
@@ -80,11 +80,11 @@ CREATE TABLE deadlines (
   title TEXT NOT NULL,
   description TEXT,
   category TEXT,
-  due_date DATE NOT NULL,
-  clients_count INTEGER DEFAULT 0,
+  dueDate DATE NOT NULL,
+  clientsCount INTEGER DEFAULT 0,
   form TEXT,
   section TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  createdAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Create templates table
@@ -93,22 +93,22 @@ CREATE TABLE templates (
   name TEXT NOT NULL,
   category TEXT,
   recurring TEXT,
-  est_hours TEXT,
+  estHours TEXT,
   description TEXT,
   color TEXT,
   subtasks TEXT[],
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  createdAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Create emails table
 CREATE TABLE emails (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  from_name TEXT,
-  from_email TEXT,
-  to_email TEXT,
+  fromName TEXT,
+  fromEmail TEXT,
+  toEmail TEXT,
   cc TEXT,
   bcc TEXT,
-  client_id UUID REFERENCES clients(id),
+  clientId UUID REFERENCES clients(id),
   subject TEXT,
   preview TEXT,
   body TEXT,
@@ -118,28 +118,28 @@ CREATE TABLE emails (
   starred BOOLEAN DEFAULT false,
   snoozed BOOLEAN DEFAULT false,
   labels TEXT[],
-  task_linked TEXT REFERENCES tasks(id),
+  taskLinked TEXT REFERENCES tasks(id),
   attachments TEXT[],
   folder TEXT DEFAULT 'inbox',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  createdAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Create notes table
 CREATE TABLE notes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  userId UUID REFERENCES profiles(id) ON DELETE CASCADE,
   title TEXT,
   content TEXT,
   color TEXT,
   pinned BOOLEAN DEFAULT false,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  createdAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+  updatedAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Create passwords table
 CREATE TABLE passwords (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+  clientId UUID REFERENCES clients(id) ON DELETE CASCADE,
   portal TEXT NOT NULL,
   url TEXT,
   username TEXT NOT NULL,
@@ -147,44 +147,44 @@ CREATE TABLE passwords (
   notes TEXT,
   category TEXT,
   strength INTEGER,
-  last_updated DATE DEFAULT CURRENT_DATE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  lastUpdated DATE DEFAULT CURRENT_DATE,
+  createdAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Create folders table
 CREATE TABLE folders (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
-  parent_id UUID REFERENCES folders(id),
-  client_id UUID REFERENCES clients(id),
+  parentId UUID REFERENCES folders(id),
+  clientId UUID REFERENCES clients(id),
   icon TEXT DEFAULT 'folder',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  createdAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Create documents table
 CREATE TABLE documents (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  folder_id UUID REFERENCES folders(id) ON DELETE CASCADE,
+  folderId UUID REFERENCES folders(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   type TEXT,
   size TEXT,
-  client_id UUID REFERENCES clients(id),
+  clientId UUID REFERENCES clients(id),
   tags TEXT[],
-  uploaded_by UUID REFERENCES profiles(id),
-  uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+  uploadedBy UUID REFERENCES profiles(id),
+  uploadedAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
   description TEXT,
   data TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  createdAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Create meetings table
 CREATE TABLE meetings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   title TEXT NOT NULL,
-  client_id UUID REFERENCES clients(id),
+  clientId UUID REFERENCES clients(id),
   type TEXT,
   platform TEXT,
-  meet_link TEXT,
+  meetLink TEXT,
   date DATE NOT NULL,
   time TEXT NOT NULL,
   duration INTEGER,
@@ -192,19 +192,19 @@ CREATE TABLE meetings (
   description TEXT,
   notes TEXT,
   status TEXT DEFAULT 'scheduled',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  createdAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Create notifications table
 CREATE TABLE notifications (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  userId UUID REFERENCES profiles(id) ON DELETE CASCADE,
   text TEXT NOT NULL,
   at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
   read BOOLEAN DEFAULT false,
   type TEXT NOT NULL,
   link TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  createdAt TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- Enable Row Level Security (RLS)

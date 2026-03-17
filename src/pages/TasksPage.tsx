@@ -110,7 +110,7 @@ export function TasksPage() {
     let t = tasks;
     
     // Non-admins only see tasks they are involved in
-    if (currentUser?.role !== 'admin') {
+    if (currentUser?.role?.toLowerCase() !== 'admin') {
       t = t.filter(x => x.assigneeId === currentUser?.id || x.reviewerId === currentUser?.id);
     }
 

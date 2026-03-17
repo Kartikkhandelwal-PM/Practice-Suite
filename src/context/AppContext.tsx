@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Task, Client, User, Deadline, Template, Meeting, Note, Password, Document, Folder, Email, TaskTypeConfig, Workflow, AppNotification } from '../types';
 import { INIT_TASKS, INIT_CLIENTS, INIT_USERS, INIT_DEADLINES, INIT_TEMPLATES, INIT_MEETINGS, INIT_NOTES, INIT_PASSWORDS, INIT_DOCS, INIT_FOLDERS, INIT_EMAILS, INIT_TASK_TYPES, INIT_WORKFLOWS } from '../data';
-import { aiApi, authApi, dataApi, sessionStore } from '../lib/api';
+import { supabase } from '../lib/supabase';
 import { genUUID } from '../utils';
 
 interface AppContextType {
@@ -114,48 +114,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initializeAuth = async () => {
-      const session = sessionStore.get();
-      await handleAuthChange(session);
+      const { data: { session } } = await supabase.auth.getSession();
+      handleAuthChange(session);
     };
 
     const handleAuthChange = async (session: any) => {
       setIsAuthenticated(!!session);
-      if (session?.access_token) {
-        const { user } = await authApi.getCurrentUser();
+      if (session?.user) {
         // Check if profile exists, if not create it
-        const profiles = await dataApi.list<User>('profiles');
-        const profile = profiles[0];
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
 
         let finalProfile = profile;
-        if (!profile) {
+        if (error && error.code === 'PGRST116') {
           // Profile not found, create it
           const newProfile = {
-            id: user.id,
-            name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-            email: user.email || '',
+            id: session.user.id,
+            name: session.user.user_metadata.full_name || session.user.email?.split('@')[0] || 'User',
+            email: session.user.email || '',
             role: 'Admin',
             designation: 'Tax Professional',
             color: '#2563eb',
             active: true,
-            avatar: user.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${user.email}&background=random`
+            avatarUrl: session.user.user_metadata.avatar_url || `https://ui-avatars.com/api/?name=${session.user.email}&background=random`
           };
-          try {
-            await dataApi.insert('profiles', newProfile);
-          } catch (insertError) {
-            console.error('Error creating profile:', insertError);
-          }
+          const { error: insertError } = await supabase.from('profiles').insert(newProfile);
+          if (insertError) console.error('Error creating profile:', insertError);
           finalProfile = newProfile;
-        } else {
+        } else if (profile) {
           finalProfile = {
             ...profile,
-            name: profile.name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-            email: profile.email || user.email || ''
+            name: profile.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+            email: profile.email || session.user.email || ''
           };
         }
 
         setCurrentUser(finalProfile);
         // Fetch all data from Supabase for this user
-        await fetchAppData(user.id, user.email);
+        fetchAppData(session.user.id, session.user.email);
       } else {
         setCurrentUser(null);
         setTasks([]);
@@ -179,48 +178,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const fetchAppData = async (userId: string, email: string) => {
       try {
         const results = await Promise.all([
-          dataApi.list<Task>('tasks'),
-          dataApi.list<Client>('clients'),
-          dataApi.list<User>('profiles'),
-          dataApi.list<Deadline>('deadlines'),
-          dataApi.list<Template>('templates'),
-          dataApi.list<Meeting>('meetings'),
-          dataApi.list<Note>('notes'),
-          dataApi.list<Password>('passwords'),
-          dataApi.list<Document>('documents'),
-          dataApi.list<Folder>('folders'),
-          dataApi.list<Email>('emails'),
-          dataApi.list<TaskTypeConfig>('task_types'),
-          dataApi.list<Workflow>('workflows'),
-          dataApi.list<AppNotification>('notifications')
+          supabase.from('tasks').select('*'),
+          supabase.from('clients').select('*'),
+          supabase.from('profiles').select('*'),
+          supabase.from('deadlines').select('*'),
+          supabase.from('templates').select('*'),
+          (supabase.from('meetings').select('*') as any).contains('attendees', [userId]),
+          supabase.from('notes').select('*'),
+          supabase.from('passwords').select('*'),
+          supabase.from('documents').select('*'),
+          supabase.from('folders').select('*'),
+          supabase.from('emails').select('*'),
+          supabase.from('task_types').select('*'),
+          supabase.from('workflows').select('*'),
+          supabase.from('notifications').select('*').eq('userId', userId)
         ]) as any[];
 
-        const tasksData = results[0] || [];
-        const clientsData = results[1] || [];
-        const profilesData = (results[2] || []).map((p: any) => ({
+        const tasksData = results[0].data || [];
+        const clientsData = results[1].data || [];
+        const profilesData = (results[2].data || []).map((p: any) => ({
           ...p,
           name: p.name || p.full_name || p.email?.split('@')[0] || 'User',
           email: p.email || ''
         }));
-        const deadlinesData = results[3] || [];
-        const templatesData = results[4] || [];
-        const meetingsData = results[5] || [];
-        const notesData = results[6] || [];
-        const passwordsData = results[7] || [];
-        const docsData = results[8] || [];
-        const foldersData = results[9] || [];
-        const emailsData = results[10] || [];
-        const taskTypesData = results[11] || [];
-        const workflowsData = results[12] || [];
-        const notificationsData = results[13] || [];
+        const deadlinesData = results[3].data || [];
+        const templatesData = results[4].data || [];
+        const meetingsData = results[5].data || [];
+        const notesData = results[6].data || [];
+        const passwordsData = results[7].data || [];
+        const docsData = results[8].data || [];
+        const foldersData = results[9].data || [];
+        const emailsData = results[10].data || [];
+        const taskTypesData = results[11].data || [];
+        const workflowsData = results[12].data || [];
+        const notificationsData = results[13].data || [];
 
         // Demo Seeding Logic
         if (email.toLowerCase() === 'kartikkhandelwal1104@gmail.com' && tasksData.length === 0) {
           console.log('Demo user detected with empty database. Seeding...');
           try {
-            await aiApi.seedDemo();
-            await fetchAppData(userId, email);
-            return;
+            const { data: { session } } = await supabase.auth.getSession();
+            const seedRes = await fetch('/api/seed-demo', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId, email, token: session?.access_token })
+            });
+            if (seedRes.ok) {
+              // Re-fetch after seeding
+              fetchAppData(userId, email);
+              return;
+            }
           } catch (seedErr) {
             console.error('Error triggering demo seed:', seedErr);
           }
@@ -246,6 +253,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     initializeAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      handleAuthChange(session);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const notify = (userId: string, text: string, type: AppNotification['type'], link?: string) => {
@@ -259,213 +272,252 @@ export function AppProvider({ children }: { children: ReactNode }) {
       link
     };
     setNotifications(prev => [newNotif, ...prev]);
-    dataApi.insert('notifications', newNotif).catch((error) => console.error('Error creating notification:', error));
+    supabase.from('notifications').insert(newNotif);
   };
 
   // Persistence wrappers
   const updateTask = async (id: string, updates: Partial<Task>) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-    await dataApi.update('tasks', id, updates);
+    const { error } = await supabase.from('tasks').update(updates).eq('id', id);
+    if (error) throw error;
   };
 
   const addTask = async (task: Task) => {
     setTasks(prev => [task, ...prev]);
-    await dataApi.insert('tasks', task);
+    const { error } = await supabase.from('tasks').insert(task);
+    if (error) throw error;
   };
 
   const deleteTask = async (id: string) => {
     setTasks(prev => prev.filter(t => t.id !== id));
-    await dataApi.remove('tasks', id);
+    const { error } = await supabase.from('tasks').delete().eq('id', id);
+    if (error) throw error;
   };
 
   const updateClient = async (id: string, updates: Partial<Client>) => {
     setClients(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
-    await dataApi.update('clients', id, updates);
+    const { error } = await supabase.from('clients').update(updates).eq('id', id);
+    if (error) throw error;
   };
 
   const addClient = async (client: Client) => {
     setClients(prev => [client, ...prev]);
-    await dataApi.insert('clients', client);
+    const { error } = await supabase.from('clients').insert(client);
+    if (error) throw error;
   };
 
   const deleteClient = async (id: string) => {
     setClients(prev => prev.filter(c => c.id !== id));
-    await dataApi.remove('clients', id);
+    const { error } = await supabase.from('clients').delete().eq('id', id);
+    if (error) throw error;
   };
 
   const updateNote = async (id: string, updates: Partial<Note>) => {
     setNotes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
-    await dataApi.update('notes', id, updates);
+    const { error } = await supabase.from('notes').update(updates).eq('id', id);
+    if (error) throw error;
   };
 
   const addNote = async (note: Note) => {
     const noteWithProfile = { ...note, profile_id: currentUser?.id };
     setNotes(prev => [noteWithProfile, ...prev]);
-    await dataApi.insert('notes', noteWithProfile);
+    const { error } = await supabase.from('notes').insert(noteWithProfile);
+    if (error) throw error;
   };
 
   const deleteNote = async (id: string) => {
     setNotes(prev => prev.filter(n => n.id !== id));
-    await dataApi.remove('notes', id);
+    const { error } = await supabase.from('notes').delete().eq('id', id);
+    if (error) throw error;
   };
 
   const updateMeeting = async (id: string, updates: Partial<Meeting>) => {
     setMeetings(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
-    await dataApi.update('meetings', id, updates);
+    const { error } = await supabase.from('meetings').update(updates).eq('id', id);
+    if (error) throw error;
   };
 
   const addMeeting = async (meeting: Meeting) => {
     const meetingWithProfile = { ...meeting, profile_id: currentUser?.id };
     setMeetings(prev => [meetingWithProfile, ...prev]);
-    await dataApi.insert('meetings', meetingWithProfile);
+    const { error } = await supabase.from('meetings').insert(meetingWithProfile);
+    if (error) throw error;
   };
 
   const deleteMeeting = async (id: string) => {
     setMeetings(prev => prev.filter(m => m.id !== id));
-    await dataApi.remove('meetings', id);
+    const { error } = await supabase.from('meetings').delete().eq('id', id);
+    if (error) throw error;
   };
 
   const updatePassword = async (id: string, updates: Partial<Password>) => {
     setPasswords(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-    await dataApi.update('passwords', id, updates);
+    const { error } = await supabase.from('passwords').update(updates).eq('id', id);
+    if (error) throw error;
   };
 
   const addPassword = async (password: Password) => {
     const passwordWithProfile = { ...password, profile_id: currentUser?.id };
     setPasswords(prev => [passwordWithProfile, ...prev]);
-    await dataApi.insert('passwords', passwordWithProfile);
+    const { error } = await supabase.from('passwords').insert(passwordWithProfile);
+    if (error) throw error;
   };
 
   const deletePassword = async (id: string) => {
     setPasswords(prev => prev.filter(p => p.id !== id));
-    await dataApi.remove('passwords', id);
+    const { error } = await supabase.from('passwords').delete().eq('id', id);
+    if (error) throw error;
   };
 
   const updateDocument = async (id: string, updates: Partial<Document>) => {
     setDocs(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
-    await dataApi.update('documents', id, updates);
+    const { error } = await supabase.from('documents').update(updates).eq('id', id);
+    if (error) throw error;
   };
 
   const addDocument = async (doc: Document) => {
     const docWithProfile = { ...doc, profile_id: currentUser?.id };
     setDocs(prev => [docWithProfile, ...prev]);
-    await dataApi.insert('documents', docWithProfile);
+    const { error } = await supabase.from('documents').insert(docWithProfile);
+    if (error) throw error;
   };
 
   const deleteDocument = async (id: string) => {
     setDocs(prev => prev.filter(d => d.id !== id));
-    await dataApi.remove('documents', id);
+    const { error } = await supabase.from('documents').delete().eq('id', id);
+    if (error) throw error;
   };
 
   const updateFolder = async (id: string, updates: Partial<Folder>) => {
     setFolders(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
-    await dataApi.update('folders', id, updates);
+    const { error } = await supabase.from('folders').update(updates).eq('id', id);
+    if (error) throw error;
   };
 
   const addFolder = async (folder: Folder) => {
     const folderWithProfile = { ...folder, profile_id: currentUser?.id };
     setFolders(prev => [folderWithProfile, ...prev]);
-    await dataApi.insert('folders', folderWithProfile);
+    const { error } = await supabase.from('folders').insert(folderWithProfile);
+    if (error) throw error;
   };
 
   const deleteFolder = async (id: string) => {
     setFolders(prev => prev.filter(f => f.id !== id));
-    await dataApi.remove('folders', id);
+    const { error } = await supabase.from('folders').delete().eq('id', id);
+    if (error) throw error;
   };
 
   const updateTaskType = async (id: string, updates: Partial<TaskTypeConfig>) => {
     setTaskTypes(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-    await dataApi.update('task_types', id, updates);
+    const { error } = await supabase.from('task_types').update(updates).eq('id', id);
+    if (error) throw error;
   };
 
   const addTaskType = async (taskType: TaskTypeConfig) => {
     const taskTypeWithProfile = { ...taskType, profile_id: currentUser?.id };
     setTaskTypes(prev => [taskTypeWithProfile, ...prev]);
-    await dataApi.insert('task_types', taskTypeWithProfile);
+    const { error } = await supabase.from('task_types').insert(taskTypeWithProfile);
+    if (error) throw error;
   };
 
   const deleteTaskType = async (id: string) => {
     setTaskTypes(prev => prev.filter(t => t.id !== id));
-    await dataApi.remove('task_types', id);
+    const { error } = await supabase.from('task_types').delete().eq('id', id);
+    if (error) throw error;
   };
 
   const updateWorkflow = async (id: string, updates: Partial<Workflow>) => {
     setWorkflows(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w));
-    await dataApi.update('workflows', id, updates);
+    const { error } = await supabase.from('workflows').update(updates).eq('id', id);
+    if (error) throw error;
   };
 
   const addWorkflow = async (workflow: Workflow) => {
     const workflowWithProfile = { ...workflow, profile_id: currentUser?.id };
     setWorkflows(prev => [workflowWithProfile, ...prev]);
-    await dataApi.insert('workflows', workflowWithProfile);
+    const { error } = await supabase.from('workflows').insert(workflowWithProfile);
+    if (error) throw error;
   };
 
   const deleteWorkflow = async (id: string) => {
     setWorkflows(prev => prev.filter(w => w.id !== id));
-    await dataApi.remove('workflows', id);
+    const { error } = await supabase.from('workflows').delete().eq('id', id);
+    if (error) throw error;
   };
 
   const updateDeadline = async (id: string, updates: Partial<Deadline>) => {
     setDeadlines(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
-    await dataApi.update('deadlines', id, updates);
+    const { error } = await supabase.from('deadlines').update(updates).eq('id', id);
+    if (error) throw error;
   };
 
   const addDeadline = async (deadline: Deadline) => {
     const deadlineWithProfile = { ...deadline, profile_id: currentUser?.id };
     setDeadlines(prev => [deadlineWithProfile, ...prev]);
-    await dataApi.insert('deadlines', deadlineWithProfile);
+    const { error } = await supabase.from('deadlines').insert(deadlineWithProfile);
+    if (error) throw error;
   };
 
   const deleteDeadline = async (id: string) => {
     setDeadlines(prev => prev.filter(d => d.id !== id));
-    await dataApi.remove('deadlines', id);
+    const { error } = await supabase.from('deadlines').delete().eq('id', id);
+    if (error) throw error;
   };
 
   const updateTemplate = async (id: string, updates: Partial<Template>) => {
     setTemplates(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-    await dataApi.update('templates', id, updates);
+    const { error } = await supabase.from('templates').update(updates).eq('id', id);
+    if (error) throw error;
   };
 
   const addTemplate = async (template: Template) => {
     const templateWithProfile = { ...template, profile_id: currentUser?.id };
     setTemplates(prev => [templateWithProfile, ...prev]);
-    await dataApi.insert('templates', templateWithProfile);
+    const { error } = await supabase.from('templates').insert(templateWithProfile);
+    if (error) throw error;
   };
 
   const deleteTemplate = async (id: string) => {
     setTemplates(prev => prev.filter(t => t.id !== id));
-    await dataApi.remove('templates', id);
+    const { error } = await supabase.from('templates').delete().eq('id', id);
+    if (error) throw error;
   };
 
   const updateEmail = async (id: string, updates: Partial<Email>) => {
     setEmails(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
-    await dataApi.update('emails', id, updates);
+    const { error } = await supabase.from('emails').update(updates).eq('id', id);
+    if (error) throw error;
   };
 
   const addEmail = async (email: Email) => {
     const emailWithProfile = { ...email, profile_id: currentUser?.id };
     setEmails(prev => [emailWithProfile, ...prev]);
-    await dataApi.insert('emails', emailWithProfile);
+    const { error } = await supabase.from('emails').insert(emailWithProfile);
+    if (error) throw error;
   };
 
   const deleteEmail = async (id: string) => {
     setEmails(prev => prev.filter(e => e.id !== id));
-    await dataApi.remove('emails', id);
+    const { error } = await supabase.from('emails').delete().eq('id', id);
+    if (error) throw error;
   };
 
   const updateUser = async (id: string, updates: Partial<User>) => {
     setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
-    await dataApi.update('profiles', id, updates);
+    const { error } = await supabase.from('profiles').update(updates).eq('id', id);
+    if (error) throw error;
   };
 
   const addUser = async (user: User) => {
     setUsers(prev => [user, ...prev]);
-    await dataApi.insert('profiles', user);
+    const { error } = await supabase.from('profiles').insert(user);
+    if (error) throw error;
   };
 
   const deleteUser = async (id: string) => {
     setUsers(prev => prev.filter(u => u.id !== id));
-    await dataApi.remove('profiles', id);
+    const { error } = await supabase.from('profiles').delete().eq('id', id);
+    if (error) throw error;
   };
 
   return (

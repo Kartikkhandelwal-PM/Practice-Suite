@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { ArrowRight, CheckCircle2, ShieldCheck, Sparkles, Building2, Mail, Lock, User as UserIcon } from 'lucide-react';
-import { authApi, sessionStore } from '../lib/api';
+import { supabase } from '../lib/supabase';
 
 export function AuthPage() {
   const { setIsAuthenticated } = useApp();
@@ -20,12 +20,45 @@ export function AuthPage() {
 
     try {
       if (mode === 'signup') {
-        await authApi.signup(email, password, fullName);
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+            },
+          },
+        });
+        if (error) throw error;
         toast('Account created! Please check your email for verification.', 'success');
         setMode('login');
       } else {
-        const data = await authApi.login(email, password);
-        if (data.session) sessionStore.set(data.session);
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) {
+          if (email.toLowerCase() === 'kartikkhandelwal1104@gmail.com') {
+            // Attempt auto-signup via backend
+            const res = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, password })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error?.message || 'Authentication failed');
+            if (data.session) {
+              await supabase.auth.setSession({
+                access_token: data.session.access_token,
+                refresh_token: data.session.refresh_token
+              });
+            } else {
+              throw new Error('Demo account created. Please check your email to verify it before logging in.');
+            }
+          } else {
+            throw error;
+          }
+        }
         toast('Welcome back!', 'success');
         setIsAuthenticated(true);
       }

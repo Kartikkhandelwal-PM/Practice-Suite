@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
-import { Search, Filter, Plus, Calendar, Reply, Forward, Paperclip, Link as LinkIcon, Settings, Bot, CheckCircle2, Mail, X, Send, Inbox, Send as SendIcon, FileText, Trash2, AlertCircle } from 'lucide-react';
+import { Search, Filter, Plus, Calendar, Reply, Forward, Paperclip, Link as LinkIcon, Settings, Bot, CheckCircle2, Mail, X, Send, Inbox, Send as SendIcon, FileText, Trash2, AlertCircle, Sparkles } from 'lucide-react';
 import { Email } from '../types';
 import { TaskModal } from '../components/ui/TaskModal';
 import { genUUID, fmt, today } from '../utils';
@@ -79,6 +79,7 @@ export function InboxPage() {
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
   const [emailSummary, setEmailSummary] = useState<EmailSummary | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [aiError, setAiError] = useState<string | null>(null);
 
   const fetchSummary = async () => {
@@ -109,9 +110,10 @@ export function InboxPage() {
   };
 
   React.useEffect(() => {
+    // Clear summary and error when email changes
     setEmailSummary(null);
     setAiError(null);
-  }, [selectedEmail?.id, currentFolder]);
+  }, [selectedEmail, currentFolder]);
 
   const openCompose = (type: 'compose' | 'reply' | 'forward', email?: Email | null, draftBody?: string) => {
     setComposeModal({ isOpen: true, type, email });
@@ -476,13 +478,6 @@ export function InboxPage() {
                         <div className="flex items-center gap-2 text-[14px] font-bold text-[#d9534f]">
                           <Bot size={18} /> AI Summary & Suggested Reply
                         </div>
-                        <button
-                          onClick={fetchSummary}
-                          disabled={isSummarizing}
-                          className="bg-white border border-orange-200 text-[#d9534f] px-3 py-1.5 rounded-lg text-[12px] font-semibold hover:bg-orange-50 transition-colors disabled:opacity-50"
-                        >
-                          {emailSummary ? 'Refresh Summary' : 'Generate Summary'}
-                        </button>
                       </div>
                       {isSummarizing ? (
                         <div className="flex items-center gap-2 text-[14px] text-gray-500 animate-pulse">
@@ -514,7 +509,7 @@ export function InboxPage() {
                               <Reply size={16} /> Use this draft
                             </button>
                             <button 
-                              onClick={fetchSummary}
+                              onClick={() => setRetryCount(prev => prev + 1)}
                               className="text-gray-500 text-[13px] font-medium hover:text-gray-700 flex items-center gap-1.5 transition-colors"
                             >
                               <Settings size={14} /> Regenerate
@@ -531,7 +526,7 @@ export function InboxPage() {
                             {aiError}
                           </div>
                           <button 
-                            onClick={fetchSummary}
+                            onClick={() => setRetryCount(prev => prev + 1)}
                             className="bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg text-[13px] font-bold hover:bg-red-50 w-fit shadow-sm transition-all mt-2"
                           >
                             Try again
@@ -539,12 +534,12 @@ export function InboxPage() {
                         </div>
                       ) : (
                         <div className="flex flex-col gap-3">
-                          <div className="text-[14px] text-gray-500">Could not generate AI insights for this email.</div>
+                          <div className="text-[14px] text-gray-500">Generate an AI summary and suggested reply for this email.</div>
                           <button 
                             onClick={fetchSummary}
-                            className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-[13px] font-bold hover:bg-gray-50 w-fit shadow-sm transition-all"
+                            className="bg-[#d9534f] text-white px-4 py-2 rounded-lg text-[13px] font-bold hover:bg-[#c9302c] w-fit shadow-sm transition-all flex items-center gap-2"
                           >
-                            Try again
+                            <Sparkles size={16} /> Generate AI Summary
                           </button>
                         </div>
                       )}

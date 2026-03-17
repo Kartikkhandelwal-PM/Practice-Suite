@@ -7,7 +7,7 @@ export interface User {
   designation: string;
   color: string;
   active: boolean;
-  avatar?: string;
+  avatarUrl?: string;
 }
 
 export interface Client {

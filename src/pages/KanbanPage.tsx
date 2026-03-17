@@ -84,12 +84,15 @@ export function KanbanPage() {
     }
   };
 
-  const filtered = tasks.filter(t =>
-    (!filterClient || t.clientId === filterClient) &&
-    (!filterType || t.type === filterType) &&
-    (!filterUser || t.assigneeId === filterUser) &&
-    (!t.parentId || expandedParents.includes(t.parentId))
-  );
+  const filtered = tasks.filter(t => {
+    if (currentUser?.role?.toLowerCase() !== 'admin') {
+      if (t.assigneeId !== currentUser?.id && t.reviewerId !== currentUser?.id) return false;
+    }
+    return (!filterClient || t.clientId === filterClient) &&
+           (!filterType || t.type === filterType) &&
+           (!filterUser || t.assigneeId === filterUser) &&
+           (!t.parentId || expandedParents.includes(t.parentId));
+  });
 
   const COLS = Array.from(new Set(workflows.flatMap(w => w.statuses)));
 

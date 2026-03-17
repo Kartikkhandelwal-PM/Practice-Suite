@@ -11,28 +11,39 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('Supabase environment variables are missing. Database operations will fail.');
+}
 
 import { GoogleGenAI, Type } from "@google/genai";
 import crypto from 'crypto';
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-// Removed top-level AI instance to ensure we always use the latest key from environment
+const supabase = createClient(supabaseUrl || '', supabaseServiceKey || '');
 
 // Seed Data Function
 async function seedUserData(userId: string, userSupabase: any) {
-  console.log(`Seeding database for user: ${userId}...`);
+  console.log(`Checking if database needs seeding for user: ${userId}...`);
 
-  // Map string IDs to UUIDs for tables that require UUIDs
+  try {
+    // Check if workflows already exist to prevent duplicate seeding
+    const { data: existingWorkflows } = await userSupabase.from('workflows').select('id').limit(1);
+    if (existingWorkflows && existingWorkflows.length > 0) {
+      console.log(`Database already has data for user: ${userId}. Skipping seed.`);
+      return { success: true, skipped: true };
+    }
+
+    console.log(`Seeding database for user: ${userId}...`);
+    // Map string IDs to UUIDs for tables that require UUIDs
   const idMap: Record<string, string> = {};
   const genId = (oldId: string) => {
     if (!idMap[oldId]) idMap[oldId] = crypto.randomUUID();
     return idMap[oldId];
   };
 
-  try {
     // 1. Workflows
     const workflows = INIT_WORKFLOWS.map(w => ({ ...w, id: genId(w.id) }));
     await userSupabase.from('workflows').insert(workflows);
@@ -50,7 +61,7 @@ async function seedUserData(userId: string, userSupabase: any) {
       designation: u.designation,
       color: u.color,
       active: u.active,
-      avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=random`
+      avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=random`
     }));
     await userSupabase.from('profiles').insert(profiles);
 
@@ -154,7 +165,7 @@ async function startServer() {
       return res.status(401).json({ error: 'Unauthorized: Missing token' });
     }
     try {
-      const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+      const userSupabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
         global: {
           headers: {
             Authorization: `Bearer ${token}`
