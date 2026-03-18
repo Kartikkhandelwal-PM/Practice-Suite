@@ -1,5 +1,5 @@
 {
-  "name": "Demo KDK Practice Suite (Automated Task)",
-  "description": "A modern operating system for CA \u0026 Tax Professionals with Supabase Auth and Gemini AI integration.",
+  "name": "KDK Practice Suite (Automated Task)",
+  "description": "A modern operating system for CA & Tax Professionals with Supabase Auth and Gemini AI integration.",
   "requestFramePermissions": []
 }

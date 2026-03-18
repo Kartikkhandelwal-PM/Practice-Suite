@@ -88,13 +88,21 @@ export function KanbanPage() {
     if (currentUser?.role?.toLowerCase() !== 'admin') {
       if (t.assigneeId !== currentUser?.id && t.reviewerId !== currentUser?.id) return false;
     }
+    
+    // In Kanban, we usually want to see top-level tasks. 
+    // If it's a subtask, only show it if its parent is expanded.
+    const isSubtask = !!t.parentId;
+    if (isSubtask && !expandedParents.includes(t.parentId!)) return false;
+
     return (!filterClient || t.clientId === filterClient) &&
            (!filterType || t.type === filterType) &&
-           (!filterUser || t.assigneeId === filterUser) &&
-           (!t.parentId || expandedParents.includes(t.parentId));
+           (!filterUser || t.assigneeId === filterUser);
   });
 
-  const COLS = Array.from(new Set(workflows.flatMap(w => w.statuses)));
+  const DEFAULT_COLS = ['To Do', 'In Progress', 'Under Review', 'Completed'];
+  const COLS = workflows.length > 0 
+    ? Array.from(new Set(workflows.flatMap(w => w.statuses)))
+    : DEFAULT_COLS;
 
   const drop = async (status: string) => {
     if (!dragId || !status) return;

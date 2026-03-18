@@ -12,7 +12,6 @@ import { genUUID, fmt, today, daysLeft, TYPE_COLORS } from '../utils';
 import { Client, Task } from '../types';
 import { Pagination } from '../components/ui/Pagination';
 import { PageHeader } from '../components/ui/PageHeader';
-import { Coachmark } from '../components/ui/Coachmark';
 
 export function ClientsPage() {
   const { clients, users, tasks, currentUser, addClient, updateClient, deleteClient, addTask, addTasks } = useApp();
@@ -480,14 +479,6 @@ export function ClientsPage() {
           itemsPerPage={itemsPerPage}
           currentPage={currentPage}
           onPageChange={setCurrentPage}
-        />
-
-        <Coachmark 
-          id="clients-onboarding"
-          title="Build Your Client Base"
-          content="Add your clients and specify their services to enable automated compliance tracking and task generation."
-          targetId="add-client-btn"
-          position="bottom"
         />
       </div>
 

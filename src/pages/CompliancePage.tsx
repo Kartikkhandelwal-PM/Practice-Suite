@@ -9,7 +9,6 @@ import { FileText, Clock, AlertCircle, CheckCircle2, Zap, RefreshCw, Plus, X, Tr
 import { Task, Deadline } from '../types';
 import { Modal } from '../components/ui/Modal';
 import { motion, AnimatePresence } from 'motion/react';
-import { Coachmark } from '../components/ui/Coachmark';
 
 export function CompliancePage() {
   const { deadlines, clients, addTask, addTasks, addDeadline, updateDeadline, deleteDeadline, currentUser, complianceCategories, setComplianceCategories } = useApp();
@@ -291,14 +290,6 @@ export function CompliancePage() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      <Coachmark 
-        id="compliance-master-onboarding"
-        title="Compliance Automation"
-        content="Learn how to automate task generation for all your clients based on statutory deadlines."
-        targetId="how-it-works-btn"
-        position="bottom"
-      />
 
       <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2 no-scrollbar">
         <button 

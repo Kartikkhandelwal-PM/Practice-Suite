@@ -13,7 +13,6 @@ import { Task } from '../types';
 import { Pagination } from '../components/ui/Pagination';
 import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../components/ui/PageHeader';
-import { Coachmark } from '../components/ui/Coachmark';
 
 export function TasksPage() {
   const { tasks, clients, users, taskTypes, workflows, currentUser, updateTask: persistUpdateTask, deleteTask: persistDeleteTask } = useApp();
@@ -43,19 +42,7 @@ export function TasksPage() {
   );
   
   const [view, setView] = useState<'list' | 'calendar'>('list');
-  const [showOnboarding, setShowOnboarding] = useState(false);
 
-  useEffect(() => {
-    const hasSeenOnboarding = localStorage.getItem('has-seen-tasks-onboarding');
-    if (!hasSeenOnboarding && tasks.length < 5) {
-      setShowOnboarding(true);
-    }
-  }, [tasks.length]);
-
-  const dismissOnboarding = () => {
-    localStorage.setItem('has-seen-tasks-onboarding', 'true');
-    setShowOnboarding(false);
-  };
   const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -290,52 +277,6 @@ export function TasksPage() {
           </button>
         }
       />
-
-      {/* Onboarding Nudge */}
-      <AnimatePresence>
-        {showOnboarding && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="mb-6 bg-blue-600 rounded-2xl p-6 text-white shadow-lg shadow-blue-200 relative overflow-hidden mx-4 md:mx-0"
-          >
-            <div className="absolute top-0 right-0 p-4">
-              <button onClick={dismissOnboarding} className="text-white/60 hover:text-white transition-colors">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="flex items-start gap-6 relative z-10">
-              <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0 border border-white/20">
-                <Sparkles size={24} className="text-white" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-xl font-bold mb-2">Welcome to your Task Workspace!</h3>
-                <p className="text-white/80 text-[15px] leading-relaxed mb-4 max-w-2xl">
-                  This is where you'll manage all your compliance and practice tasks. You can switch between a List view for efficiency or a Calendar view for better visibility of deadlines.
-                </p>
-                <div className="flex items-center gap-4">
-                  <button 
-                    onClick={() => { setView('calendar'); dismissOnboarding(); }}
-                    className="bg-white text-blue-600 px-4 py-2 rounded-lg text-[14px] font-bold hover:bg-blue-50 transition-colors"
-                  >
-                    Try Calendar View
-                  </button>
-                  <button 
-                    onClick={dismissOnboarding}
-                    className="text-white/80 hover:text-white text-[14px] font-medium transition-colors"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            </div>
-            {/* Decorative circles */}
-            <div className="absolute -bottom-12 -right-12 w-48 h-48 rounded-full bg-white/10 blur-3xl" />
-            <div className="absolute -top-12 -left-12 w-32 h-32 rounded-full bg-blue-400/20 blur-2xl" />
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className="flex gap-2 items-center flex-wrap mb-4">
         <div className="flex bg-gray-100/50 p-1 rounded-xl border border-gray-200 shrink-0 mr-2">
@@ -1133,13 +1074,6 @@ export function TasksPage() {
           </div>
           
           <div id="calendar-view-container" className="absolute top-0 left-0 w-full h-full pointer-events-none" />
-          <Coachmark 
-            id="calendar-view-onboarding"
-            title="Master Your Schedule"
-            content="The calendar view helps you visualize deadlines and dependencies. Drag and drop tasks to reschedule (coming soon!)."
-            targetId="calendar-view-container"
-            position="top"
-          />
         </motion.div>
       )}
 

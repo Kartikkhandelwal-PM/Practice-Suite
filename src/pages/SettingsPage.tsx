@@ -17,7 +17,7 @@ export function SettingsPage() {
     updateUser, addUser, deleteUser, 
     updateTaskType, addTaskType, deleteTaskType, 
     updateWorkflow, addWorkflow, deleteWorkflow,
-    updateRole, addRole, deleteRole, logout 
+    updateRole, addRole, deleteRole, logout, seedSampleData 
   } = useApp();
   const toast = useToast();
   const { confirm } = useConfirm();
@@ -229,7 +229,7 @@ export function SettingsPage() {
           {tab === 'profile' && (
             <div className="max-w-2xl">
               <h2 className="text-[16px] font-semibold text-gray-900 mb-4">Workspace Settings</h2>
-              <div className="space-y-4">
+              <div className="space-y-4 mb-8">
                 <div>
                   <label className="block text-[12px] font-semibold text-gray-700 mb-1.5">Workspace Name</label>
                   <input className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-blue-600" defaultValue="KDK Practice Suite" />
@@ -243,6 +243,22 @@ export function SettingsPage() {
                 </div>
                 <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-[13px] font-medium transition-colors mt-4">
                   Save Changes
+                </button>
+              </div>
+
+              <div className="pt-8 border-t border-gray-100">
+                <h2 className="text-[16px] font-semibold text-gray-900 mb-2">Data Management</h2>
+                <p className="text-[13px] text-gray-500 mb-4">Populate your workspace with sample data to explore features.</p>
+                <button 
+                  onClick={async () => {
+                    if (await confirm({ title: 'Seed Sample Data', message: 'This will add sample tasks, clients, and deadlines to your workspace. Continue?' })) {
+                      await seedSampleData();
+                      toast('Sample data seeded successfully', 'success');
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <Zap size={16} className="text-amber-500" /> Seed Sample Data
                 </button>
               </div>
             </div>

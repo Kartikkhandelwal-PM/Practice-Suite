@@ -48,7 +48,7 @@ export function StickyNotesPage() {
 
   const save = async () => {
     if (!form?.title.trim() && !form?.content.trim()) { toast('Note is empty', 'error'); return; }
-    const updated = { ...form, updatedAt: fmt(today) };
+    const updated = { ...form };
     try {
       if (notes.find(n => n.id === form.id)) {
         await updateNote(form.id, updated);

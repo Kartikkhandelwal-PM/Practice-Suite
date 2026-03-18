@@ -48,12 +48,13 @@ CREATE TABLE permissions (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- User Profiles (Extends auth.users)
+-- User Profiles (Extends auth.users optionally)
 CREATE TABLE user_profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY, -- Removed direct FK to auth.users to allow mock users
   full_name TEXT,
   role_id UUID REFERENCES roles(id),
   designation TEXT,
+  color TEXT,
   email TEXT,
   active BOOLEAN DEFAULT true,
   avatar_url TEXT,
@@ -115,9 +116,9 @@ CREATE TABLE tasks (
   priority TEXT DEFAULT 'Medium',
   due_date TIMESTAMPTZ,
   client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
-  assigned_to UUID REFERENCES auth.users(id),
-  reviewer_id UUID REFERENCES auth.users(id),
-  reporter_id UUID REFERENCES auth.users(id),
+  assigned_to UUID REFERENCES user_profiles(id), -- Reference user_profiles instead of auth.users
+  reviewer_id UUID REFERENCES user_profiles(id), -- Reference user_profiles instead of auth.users
+  reporter_id UUID REFERENCES user_profiles(id), -- Reference user_profiles instead of auth.users
   type TEXT,
   issue_type TEXT,
   tags TEXT[],
@@ -319,30 +320,54 @@ BEGIN
         EXECUTE format('DROP POLICY IF EXISTS "Allow read for authenticated" ON %I;', t);
         EXECUTE format('DROP POLICY IF EXISTS "Service role bypass" ON %I;', t);
         
-        -- Grant basic permissions to authenticated role
-        EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO authenticated;', t);
-        EXECUTE format('GRANT SELECT ON %I TO anon;', t);
-        EXECUTE format('GRANT ALL ON %I TO service_role;', t);
+    -- Grant basic permissions to authenticated role
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO authenticated;', t);
+    EXECUTE format('GRANT SELECT ON %I TO anon;', t);
+    EXECUTE format('GRANT ALL ON %I TO service_role;', t);
 
-        -- Simple policy: users can only see/edit their own data (where profile_id matches)
-        -- For roles and permissions, they are readable by all authenticated users
-        IF t IN ('roles', 'permissions') THEN
-            EXECUTE format('CREATE POLICY "Allow read for authenticated" ON %I FOR SELECT TO authenticated USING (true);', t);
+    -- Simple policy: users can only see/edit their own data (where profile_id matches)
+    -- For roles and permissions, they are readable by all authenticated users
+    IF t IN ('roles', 'permissions', 'task_types', 'workflows') THEN
+        EXECUTE format('CREATE POLICY "Allow read for authenticated" ON %I FOR SELECT TO authenticated USING (true);', t);
+        IF t IN ('task_types', 'workflows') THEN
+            EXECUTE format('CREATE POLICY "Allow owner access" ON %I FOR ALL TO authenticated USING (auth.uid() = profile_id) WITH CHECK (auth.uid() = profile_id);', t);
+        END IF;
+    ELSE
+        -- Check if table has profile_id column
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = t AND column_name = 'profile_id') THEN
+            EXECUTE format('CREATE POLICY "Allow owner access" ON %I FOR ALL TO authenticated USING (auth.uid() = profile_id) WITH CHECK (auth.uid() = profile_id);', t);
+        ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = t AND column_name = 'id' AND t = 'user_profiles') THEN
+            EXECUTE format('CREATE POLICY "Allow owner access" ON %I FOR ALL TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);', t);
         ELSE
-            -- Check if table has profile_id column
-            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = t AND column_name = 'profile_id') THEN
-                EXECUTE format('CREATE POLICY "Allow owner access" ON %I FOR ALL TO authenticated USING (auth.uid() = profile_id) WITH CHECK (auth.uid() = profile_id);', t);
-            ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = t AND column_name = 'id' AND t = 'user_profiles') THEN
-                EXECUTE format('CREATE POLICY "Allow owner access" ON %I FOR ALL TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);', t);
-            ELSE
-                -- Fallback for tables without profile_id
-                EXECUTE format('CREATE POLICY "Allow all for authenticated" ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true);', t);
-            END IF;
+            -- Fallback for tables without profile_id
+            EXECUTE format('CREATE POLICY "Allow all for authenticated" ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true);', t);
         END IF;
     END LOOP;
 END $$;
 
--- 4. Helper for Admin Setup
+-- 4. Automatic Profile Creation Trigger
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.user_profiles (id, full_name, email, role_id)
+  VALUES (
+    new.id,
+    COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+    new.email,
+    (SELECT id FROM public.roles WHERE name = 'Admin' LIMIT 1)
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Drop trigger if exists and recreate
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- 5. Helper for Admin Setup
 -- After you sign up, run this to make yourself an Admin:
 -- UPDATE user_profiles SET role_id = (SELECT id FROM roles WHERE name = 'Admin') 
 -- WHERE id = (SELECT id FROM auth.users WHERE email = 'kartikkhandelwal1104@gmail.com');
