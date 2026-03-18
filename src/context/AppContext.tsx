@@ -173,71 +173,135 @@ export function AppProvider({ children }: { children: ReactNode }) {
     
     // Fetch data from backend
     try {
-      const { data: tasksData } = await supabase.from('tasks').select('*');
-      const { data: clientsData } = await supabase.from('clients').select('*');
+      const [
+        { data: tasksData },
+        { data: clientsData },
+        { data: deadlinesData },
+        { data: templatesData },
+        { data: meetingsData },
+        { data: notesData },
+        { data: passwordsData },
+        { data: docsData },
+        { data: foldersData },
+        { data: emailsData },
+        { data: taskTypesData },
+        { data: workflowsData },
+        { data: rolesData },
+        { data: permissionsData }
+      ] = await Promise.all([
+        supabase.from('tasks').select('*'),
+        supabase.from('clients').select('*'),
+        supabase.from('deadlines').select('*'),
+        supabase.from('templates').select('*'),
+        supabase.from('meetings').select('*'),
+        supabase.from('notes').select('*'),
+        supabase.from('passwords').select('*'),
+        supabase.from('documents').select('*'),
+        supabase.from('folders').select('*'),
+        supabase.from('emails').select('*'),
+        supabase.from('task_types').select('*'),
+        supabase.from('workflows').select('*'),
+        supabase.from('roles').select('*'),
+        supabase.from('permissions').select('*')
+      ]);
       
+      // Map and set tasks
       if (Array.isArray(tasksData) && tasksData.length > 0) {
-        setTasks(tasksData);
+        setTasks(tasksData.map(t => ({
+          ...t,
+          clientId: t.client_id,
+          assigneeId: t.assigned_to,
+          reviewerId: t.reviewer_id,
+          reporterId: t.reporter_id,
+          dueDate: t.due_date,
+          createdAt: t.created_at,
+          issueType: t.issue_type,
+          statutoryDeadline: t.statutory_deadline,
+          parentId: t.parent_id,
+          linkedTasks: t.linked_tasks,
+          dependencies: t.dependencies
+        })));
       } else if (isSampleUser) {
         setTasks(INIT_TASKS);
+        // Seed DB for sample user if empty
+        const tasksToInsert = INIT_TASKS.map(t => {
+          const dbTask: any = { ...t, client_id: t.clientId, assigned_to: t.assigneeId, reviewer_id: t.reviewerId, due_date: t.dueDate, issue_type: t.issueType, parent_id: t.parentId, statutory_deadline: t.statutoryDeadline, linked_tasks: t.linkedTasks, created_at: t.createdAt };
+          delete dbTask.clientId; delete dbTask.assigneeId; delete dbTask.reviewerId; delete dbTask.dueDate; delete dbTask.issueType; delete dbTask.parentId; delete dbTask.statutoryDeadline; delete dbTask.linkedTasks; delete dbTask.createdAt;
+          return dbTask;
+        });
+        await supabase.from('tasks').insert(tasksToInsert);
       } else {
         setTasks([]);
       }
 
+      // Map and set clients
       if (Array.isArray(clientsData) && clientsData.length > 0) {
-        setClients(clientsData);
+        setClients(clientsData.map(c => ({
+          ...c,
+          onboarded: c.onboarded_at
+        })));
       } else if (isSampleUser) {
         setClients(INIT_CLIENTS);
+        const clientsToInsert = INIT_CLIENTS.map(c => {
+          const dbClient: any = { ...c, onboarded_at: c.onboarded };
+          delete dbClient.onboarded;
+          return dbClient;
+        });
+        await supabase.from('clients').insert(clientsToInsert);
       } else {
         setClients([]);
       }
+
+      // Set other data
+      const setAndSeed = async (table: string, data: any[], setter: any, initData: any[], mapper?: any) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setter(mapper ? data.map(mapper) : data);
+        } else if (isSampleUser) {
+          setter(initData);
+          // Seed DB
+          const toInsert = initData.map(item => {
+            const dbItem: any = { ...item, user_id: user.id, profile_id: user.id };
+            // Manual mapping for some tables
+            if (table === 'deadlines') { dbItem.due_date = item.dueDate; dbItem.description = item.desc; delete dbItem.dueDate; delete dbItem.desc; }
+            if (table === 'templates') { dbItem.est_hours = item.estHours; delete dbItem.estHours; }
+            if (table === 'meetings') { dbItem.client_id = item.clientId; dbItem.meet_link = item.meetLink; delete dbItem.clientId; delete dbItem.meetLink; }
+            if (table === 'notes') { dbItem.created_at = item.createdAt; dbItem.updated_at = item.updatedAt; delete dbItem.createdAt; delete dbItem.updatedAt; }
+            if (table === 'passwords') { dbItem.client_id = item.clientId; delete dbItem.clientId; }
+            if (table === 'documents') { dbItem.folder_id = item.folderId; dbItem.client_id = item.clientId; dbItem.uploaded_by = item.uploadedBy; dbItem.created_at = item.uploadedAt; delete dbItem.folderId; delete dbItem.clientId; delete dbItem.uploadedBy; delete dbItem.uploadedAt; }
+            if (table === 'folders') { dbItem.parent_id = item.parentId; dbItem.client_id = item.clientId; delete dbItem.parentId; delete dbItem.clientId; }
+            if (table === 'emails') { dbItem.from_email = item.fromEmail; dbItem.to_email = item.to; dbItem.client_id = item.clientId; dbItem.task_linked = item.taskLinked; delete dbItem.fromEmail; delete dbItem.to; delete dbItem.clientId; delete dbItem.taskLinked; }
+            if (table === 'task_types') { dbItem.workflow_id = item.workflowId; delete dbItem.workflowId; }
+            return dbItem;
+          });
+          await supabase.from(table).insert(toInsert);
+        } else {
+          setter([]);
+        }
+      };
+
+      await setAndSeed('deadlines', deadlinesData || [], setDeadlines, INIT_DEADLINES, (d: any) => ({ ...d, dueDate: d.due_date, desc: d.description }));
+      await setAndSeed('templates', templatesData || [], setTemplates, INIT_TEMPLATES, (t: any) => ({ ...t, estHours: t.est_hours }));
+      await setAndSeed('meetings', meetingsData || [], setMeetings, INIT_MEETINGS, (m: any) => ({ ...m, clientId: m.client_id, meetLink: m.meet_link }));
+      await setAndSeed('notes', notesData || [], setNotes, INIT_NOTES, (n: any) => ({ ...n, createdAt: n.created_at, updatedAt: n.updated_at }));
+      await setAndSeed('passwords', passwordsData || [], setPasswords, INIT_PASSWORDS, (p: any) => ({ ...p, clientId: p.client_id, lastUpdated: p.updated_at }));
+      await setAndSeed('documents', docsData || [], setDocs, INIT_DOCS, (d: any) => ({ ...d, folderId: d.folder_id, clientId: d.client_id, uploadedBy: d.uploaded_by, uploadedAt: d.created_at }));
+      await setAndSeed('folders', foldersData || [], setFolders, INIT_FOLDERS, (f: any) => ({ ...f, parentId: f.parent_id, clientId: f.client_id }));
+      await setAndSeed('emails', emailsData || [], setEmails, INIT_EMAILS, (e: any) => ({ ...e, fromEmail: e.from_email, to: e.to_email, clientId: e.client_id, taskLinked: e.task_linked }));
+      await setAndSeed('task_types', taskTypesData || [], setTaskTypes, INIT_TASK_TYPES, (tt: any) => ({ ...tt, workflowId: tt.workflow_id }));
+      setWorkflows(Array.isArray(workflowsData) && workflowsData.length > 0 ? workflowsData : (isSampleUser ? INIT_WORKFLOWS : []));
+      setRoles(Array.isArray(rolesData) && rolesData.length > 0 ? rolesData : INIT_ROLES);
+      setPermissions(Array.isArray(permissionsData) && permissionsData.length > 0 ? permissionsData : INIT_PERMISSIONS);
       
-      // Fallback to local storage for other non-table data or use more tables
+      // Fallback to local storage for remaining non-table data
       const storageKey = `app-data-${user.id}`;
       const persistedData = localStorage.getItem(storageKey);
       
       if (persistedData) {
         const data = JSON.parse(persistedData);
-        setDeadlines(data.deadlines || []);
-        setTemplates(data.templates || []);
-        setMeetings(data.meetings || []);
-        setNotes(data.notes || []);
-        setPasswords(data.passwords || []);
-        setDocs(data.docs || []);
-        setFolders(data.folders || []);
-        setEmails(data.emails || []);
-        setTaskTypes(data.taskTypes || []);
-        setWorkflows(data.workflows || []);
-        setRoles(data.roles || INIT_ROLES);
-        setPermissions(data.permissions || INIT_PERMISSIONS);
-      } else if (isSampleUser) {
-        // Load sample data only for the primary user
-        setDeadlines(INIT_DEADLINES);
-        setTemplates(INIT_TEMPLATES);
-        setMeetings(INIT_MEETINGS);
-        setNotes(INIT_NOTES);
-        setPasswords(INIT_PASSWORDS);
-        setDocs(INIT_DOCS);
-        setFolders(INIT_FOLDERS);
-        setEmails(INIT_EMAILS);
-        setTaskTypes(INIT_TASK_TYPES);
-        setWorkflows(INIT_WORKFLOWS);
-        setRoles(INIT_ROLES);
-        setPermissions(INIT_PERMISSIONS);
-      } else {
-        // Fresh state for other users
-        setDeadlines([]);
-        setTemplates([]);
-        setMeetings([]);
-        setNotes([]);
-        setPasswords([]);
-        setDocs([]);
-        setFolders([]);
-        setEmails([]);
-        setTaskTypes([]);
-        setWorkflows([]);
-        setRoles(INIT_ROLES);
-        setPermissions(INIT_PERMISSIONS);
+        // Only set if not already loaded from DB
+        if (!tasksData?.length && !isSampleUser) setTasks(data.tasks || []);
+        if (!clientsData?.length && !isSampleUser) setClients(data.clients || []);
+        // ... other fields if needed
       }
     } catch (err) {
       console.error('Error loading data:', err);
@@ -268,11 +332,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isAuthenticated && currentUser) {
       const storageKey = `app-data-${currentUser.id}`;
       const dataToPersist = {
-        tasks, clients, users, deadlines, templates, meetings, notes, passwords, docs, folders, emails, taskTypes, workflows, notifications, complianceCategories, roles, permissions
+        complianceCategories, sidebarCollapsed
       };
       localStorage.setItem(storageKey, JSON.stringify(dataToPersist));
     }
-  }, [tasks, clients, users, deadlines, templates, meetings, notes, passwords, docs, folders, emails, taskTypes, workflows, notifications, complianceCategories, roles, permissions, isAuthenticated, currentUser]);
+  }, [complianceCategories, sidebarCollapsed, isAuthenticated, currentUser]);
 
   const notify = (userId: string, text: string, type: AppNotification['type'], link?: string) => {
     const newNotif: AppNotification = {
@@ -298,15 +362,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return userRole.permissions.includes(permissionId);
   };
 
-  // Persistence wrappers (Local only for now)
+  // Persistence wrappers
   const updateTask = async (id: string, updates: Partial<Task>) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    
+    const dbUpdates: any = { ...updates };
+    if (updates.clientId) { dbUpdates.client_id = updates.clientId; delete dbUpdates.clientId; }
+    if (updates.assigneeId) { dbUpdates.assigned_to = updates.assigneeId; delete dbUpdates.assigneeId; }
+    if (updates.reviewerId) { dbUpdates.reviewer_id = updates.reviewerId; delete dbUpdates.reviewerId; }
+    if (updates.dueDate) { dbUpdates.due_date = updates.dueDate; delete dbUpdates.dueDate; }
+    if (updates.issueType) { dbUpdates.issue_type = updates.issueType; delete dbUpdates.issueType; }
+    if (updates.parentId) { dbUpdates.parent_id = updates.parentId; delete dbUpdates.parentId; }
+    if (updates.statutoryDeadline) { dbUpdates.statutory_deadline = updates.statutoryDeadline; delete dbUpdates.statutoryDeadline; }
+    if (updates.linkedTasks) { dbUpdates.linked_tasks = updates.linkedTasks; delete dbUpdates.linkedTasks; }
+    if (updates.createdAt) { dbUpdates.created_at = updates.createdAt; delete dbUpdates.createdAt; }
+    
+    await supabase.from('tasks').update(dbUpdates).eq('id', id);
   };
 
   const addTask = async (task: Task): Promise<string> => {
     let finalId = task.id;
+    let finalTask = { ...task };
+    
     setTasks(prev => {
-      let finalTask = { ...task };
       if (!task.id.startsWith('KDK-') || task.id.length > 20) {
         let max = 0;
         prev.forEach(t => {
@@ -320,12 +398,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       return [finalTask, ...prev];
     });
-    // Note: finalId might not be accurate if setTasks is deferred, but in most cases it's synchronous enough for immediate use, or we should use addTasks for bulk.
+
+    const dbTask: any = { 
+      ...finalTask,
+      client_id: finalTask.clientId,
+      assigned_to: finalTask.assigneeId,
+      reviewer_id: finalTask.reviewerId,
+      due_date: finalTask.dueDate,
+      issue_type: finalTask.issueType,
+      parent_id: finalTask.parentId,
+      statutory_deadline: finalTask.statutoryDeadline,
+      linked_tasks: finalTask.linkedTasks,
+      created_at: finalTask.createdAt
+    };
+    delete dbTask.clientId;
+    delete dbTask.assigneeId;
+    delete dbTask.reviewerId;
+    delete dbTask.dueDate;
+    delete dbTask.issueType;
+    delete dbTask.parentId;
+    delete dbTask.statutoryDeadline;
+    delete dbTask.linkedTasks;
+    delete dbTask.createdAt;
+
+    await supabase.from('tasks').insert(dbTask);
     return finalId;
   };
 
   const addTasks = async (newTasks: Task[]): Promise<string[]> => {
     let finalIds: string[] = [];
+    let tasksToInsert: any[] = [];
+    
     setTasks(prev => {
       let max = 0;
       prev.forEach(t => {
@@ -348,186 +451,333 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return finalTask;
       });
       
-      // Update parentIds if they were changed
       tasksToAdd.forEach(t => {
         if (t.parentId && idMap[t.parentId]) {
           t.parentId = idMap[t.parentId];
         }
+        
+        const dbTask: any = { 
+          ...t,
+          client_id: t.clientId,
+          assigned_to: t.assigneeId,
+          reviewer_id: t.reviewerId,
+          due_date: t.dueDate,
+          issue_type: t.issueType,
+          parent_id: t.parentId,
+          statutory_deadline: t.statutoryDeadline,
+          linked_tasks: t.linkedTasks,
+          created_at: t.createdAt
+        };
+        delete dbTask.clientId;
+        delete dbTask.assigneeId;
+        delete dbTask.reviewerId;
+        delete dbTask.dueDate;
+        delete dbTask.issueType;
+        delete dbTask.parentId;
+        delete dbTask.statutoryDeadline;
+        delete dbTask.linkedTasks;
+        delete dbTask.createdAt;
+        tasksToInsert.push(dbTask);
       });
       
       return [...tasksToAdd, ...prev];
     });
+    
+    if (tasksToInsert.length > 0) {
+      await supabase.from('tasks').insert(tasksToInsert);
+    }
     return finalIds;
   };
 
   const deleteTask = async (id: string) => {
     setTasks(prev => prev.filter(t => t.id !== id));
+    await supabase.from('tasks').delete().eq('id', id);
   };
 
   const updateClient = async (id: string, updates: Partial<Client>) => {
     setClients(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+    
+    const dbUpdates: any = { ...updates };
+    if (updates.onboarded) { dbUpdates.onboarded_at = updates.onboarded; delete dbUpdates.onboarded; }
+    
+    await supabase.from('clients').update(dbUpdates).eq('id', id);
   };
 
   const addClient = async (client: Client) => {
     setClients(prev => [client, ...prev]);
+    
+    const dbClient: any = { ...client, onboarded_at: client.onboarded };
+    delete dbClient.onboarded;
+    
+    await supabase.from('clients').insert(dbClient);
   };
 
   const deleteClient = async (id: string) => {
     setClients(prev => prev.filter(c => c.id !== id));
+    await supabase.from('clients').delete().eq('id', id);
   };
 
   const updateNote = async (id: string, updates: Partial<Note>) => {
     setNotes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
+    const dbUpdates: any = { ...updates };
+    if (updates.createdAt) { dbUpdates.created_at = updates.createdAt; delete dbUpdates.createdAt; }
+    if (updates.updatedAt) { dbUpdates.updated_at = updates.updatedAt; delete dbUpdates.updatedAt; }
+    await supabase.from('notes').update(dbUpdates).eq('id', id);
   };
 
   const addNote = async (note: Note) => {
     const noteWithProfile = { ...note, profile_id: currentUser?.id };
     setNotes(prev => [noteWithProfile, ...prev]);
+    const dbNote: any = { ...noteWithProfile, user_id: currentUser?.id, created_at: note.createdAt, updated_at: note.updatedAt };
+    delete dbNote.createdAt;
+    delete dbNote.updatedAt;
+    await supabase.from('notes').insert(dbNote);
   };
 
   const deleteNote = async (id: string) => {
     setNotes(prev => prev.filter(n => n.id !== id));
+    await supabase.from('notes').delete().eq('id', id);
   };
 
   const updateMeeting = async (id: string, updates: Partial<Meeting>) => {
     setMeetings(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
+    const dbUpdates: any = { ...updates };
+    if (updates.clientId) { dbUpdates.client_id = updates.clientId; delete dbUpdates.clientId; }
+    if (updates.meetLink) { dbUpdates.meet_link = updates.meetLink; delete dbUpdates.meetLink; }
+    await supabase.from('meetings').update(dbUpdates).eq('id', id);
   };
 
   const addMeeting = async (meeting: Meeting) => {
     const meetingWithProfile = { ...meeting, profile_id: currentUser?.id };
     setMeetings(prev => [meetingWithProfile, ...prev]);
+    const dbMeeting: any = { ...meetingWithProfile, client_id: meeting.clientId, meet_link: meeting.meetLink };
+    delete dbMeeting.clientId;
+    delete dbMeeting.meetLink;
+    await supabase.from('meetings').insert(dbMeeting);
   };
 
   const deleteMeeting = async (id: string) => {
     setMeetings(prev => prev.filter(m => m.id !== id));
+    await supabase.from('meetings').delete().eq('id', id);
   };
 
   const updatePassword = async (id: string, updates: Partial<Password>) => {
     setPasswords(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+    const dbUpdates: any = { ...updates };
+    if (updates.clientId) { dbUpdates.client_id = updates.clientId; delete dbUpdates.clientId; }
+    if (updates.lastUpdated) { dbUpdates.updated_at = updates.lastUpdated; delete dbUpdates.lastUpdated; }
+    await supabase.from('passwords').update(dbUpdates).eq('id', id);
   };
 
   const addPassword = async (password: Password) => {
     const passwordWithProfile = { ...password, profile_id: currentUser?.id };
     setPasswords(prev => [passwordWithProfile, ...prev]);
+    const dbPassword: any = { ...passwordWithProfile, client_id: password.clientId };
+    delete dbPassword.clientId;
+    await supabase.from('passwords').insert(dbPassword);
   };
 
   const deletePassword = async (id: string) => {
     setPasswords(prev => prev.filter(p => p.id !== id));
+    await supabase.from('passwords').delete().eq('id', id);
   };
 
   const updateDocument = async (id: string, updates: Partial<Document>) => {
     setDocs(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
+    const dbUpdates: any = { ...updates };
+    if (updates.folderId) { dbUpdates.folder_id = updates.folderId; delete dbUpdates.folderId; }
+    if (updates.clientId) { dbUpdates.client_id = updates.clientId; delete dbUpdates.clientId; }
+    if (updates.uploadedBy) { dbUpdates.uploaded_by = updates.uploadedBy; delete dbUpdates.uploadedBy; }
+    if (updates.uploadedAt) { dbUpdates.created_at = updates.uploadedAt; delete dbUpdates.uploadedAt; }
+    await supabase.from('documents').update(dbUpdates).eq('id', id);
   };
 
   const addDocument = async (doc: Document) => {
     const docWithProfile = { ...doc, profile_id: currentUser?.id };
     setDocs(prev => [docWithProfile, ...prev]);
+    const dbDoc: any = { 
+      ...docWithProfile, 
+      folder_id: doc.folderId, 
+      client_id: doc.clientId, 
+      uploaded_by: doc.uploadedBy,
+      created_at: doc.uploadedAt
+    };
+    delete dbDoc.folderId;
+    delete dbDoc.clientId;
+    delete dbDoc.uploadedBy;
+    delete dbDoc.uploadedAt;
+    await supabase.from('documents').insert(dbDoc);
   };
 
   const deleteDocument = async (id: string) => {
     setDocs(prev => prev.filter(d => d.id !== id));
+    await supabase.from('documents').delete().eq('id', id);
   };
 
   const updateFolder = async (id: string, updates: Partial<Folder>) => {
     setFolders(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
+    const dbUpdates: any = { ...updates };
+    if (updates.parentId) { dbUpdates.parent_id = updates.parentId; delete dbUpdates.parentId; }
+    if (updates.clientId) { dbUpdates.client_id = updates.clientId; delete dbUpdates.clientId; }
+    await supabase.from('folders').update(dbUpdates).eq('id', id);
   };
 
   const addFolder = async (folder: Folder) => {
     const folderWithProfile = { ...folder, profile_id: currentUser?.id };
     setFolders(prev => [folderWithProfile, ...prev]);
+    const dbFolder: any = { ...folderWithProfile, parent_id: folder.parentId, client_id: folder.clientId };
+    delete dbFolder.parentId;
+    delete dbFolder.clientId;
+    await supabase.from('folders').insert(dbFolder);
   };
 
   const deleteFolder = async (id: string) => {
     setFolders(prev => prev.filter(f => f.id !== id));
+    await supabase.from('folders').delete().eq('id', id);
   };
 
   const updateTaskType = async (id: string, updates: Partial<TaskTypeConfig>) => {
     setTaskTypes(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    const dbUpdates: any = { ...updates };
+    if (updates.workflowId) { dbUpdates.workflow_id = updates.workflowId; delete dbUpdates.workflowId; }
+    await supabase.from('task_types').update(dbUpdates).eq('id', id);
   };
 
   const addTaskType = async (taskType: TaskTypeConfig) => {
     const taskTypeWithProfile = { ...taskType, profile_id: currentUser?.id };
     setTaskTypes(prev => [taskTypeWithProfile, ...prev]);
+    const dbTaskType: any = { ...taskTypeWithProfile, workflow_id: taskType.workflowId };
+    delete dbTaskType.workflowId;
+    await supabase.from('task_types').insert(dbTaskType);
   };
 
   const deleteTaskType = async (id: string) => {
     setTaskTypes(prev => prev.filter(t => t.id !== id));
+    await supabase.from('task_types').delete().eq('id', id);
   };
 
   const updateWorkflow = async (id: string, updates: Partial<Workflow>) => {
     setWorkflows(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w));
+    await supabase.from('workflows').update(updates).eq('id', id);
   };
 
   const addWorkflow = async (workflow: Workflow) => {
     const workflowWithProfile = { ...workflow, profile_id: currentUser?.id };
     setWorkflows(prev => [workflowWithProfile, ...prev]);
+    await supabase.from('workflows').insert(workflowWithProfile);
   };
 
   const deleteWorkflow = async (id: string) => {
     setWorkflows(prev => prev.filter(w => w.id !== id));
+    await supabase.from('workflows').delete().eq('id', id);
   };
 
   const updateDeadline = async (id: string, updates: Partial<Deadline>) => {
     setDeadlines(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
+    const dbUpdates: any = { ...updates };
+    if (updates.dueDate) { dbUpdates.due_date = updates.dueDate; delete dbUpdates.dueDate; }
+    if (updates.desc) { dbUpdates.description = updates.desc; delete dbUpdates.desc; }
+    await supabase.from('deadlines').update(dbUpdates).eq('id', id);
   };
 
   const addDeadline = async (deadline: Deadline) => {
     const deadlineWithProfile = { ...deadline, profile_id: currentUser?.id };
     setDeadlines(prev => [deadlineWithProfile, ...prev]);
+    const dbDeadline: any = { ...deadlineWithProfile, due_date: deadline.dueDate, description: deadline.desc };
+    delete dbDeadline.dueDate;
+    delete dbDeadline.desc;
+    await supabase.from('deadlines').insert(dbDeadline);
   };
 
   const deleteDeadline = async (id: string) => {
     setDeadlines(prev => prev.filter(d => d.id !== id));
+    await supabase.from('deadlines').delete().eq('id', id);
   };
 
   const updateTemplate = async (id: string, updates: Partial<Template>) => {
     setTemplates(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    const dbUpdates: any = { ...updates };
+    if (updates.estHours) { dbUpdates.est_hours = updates.estHours; delete dbUpdates.estHours; }
+    await supabase.from('templates').update(dbUpdates).eq('id', id);
   };
 
   const addTemplate = async (template: Template) => {
     const templateWithProfile = { ...template, profile_id: currentUser?.id };
     setTemplates(prev => [templateWithProfile, ...prev]);
+    const dbTemplate: any = { ...templateWithProfile, est_hours: template.estHours };
+    delete dbTemplate.estHours;
+    await supabase.from('templates').insert(dbTemplate);
   };
 
   const deleteTemplate = async (id: string) => {
     setTemplates(prev => prev.filter(t => t.id !== id));
+    await supabase.from('templates').delete().eq('id', id);
   };
 
   const updateEmail = async (id: string, updates: Partial<Email>) => {
     setEmails(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+    const dbUpdates: any = { ...updates };
+    if (updates.fromEmail) { dbUpdates.from_email = updates.fromEmail; delete dbUpdates.fromEmail; }
+    if (updates.to) { dbUpdates.to_email = updates.to; delete dbUpdates.to; }
+    if (updates.clientId) { dbUpdates.client_id = updates.clientId; delete dbUpdates.clientId; }
+    if (updates.taskLinked) { dbUpdates.task_linked = updates.taskLinked; delete dbUpdates.taskLinked; }
+    await supabase.from('emails').update(dbUpdates).eq('id', id);
   };
 
   const addEmail = async (email: Email) => {
     const emailWithProfile = { ...email, profile_id: currentUser?.id };
     setEmails(prev => [emailWithProfile, ...prev]);
+    const dbEmail: any = { 
+      ...emailWithProfile, 
+      from_email: email.fromEmail, 
+      to_email: email.to, 
+      client_id: email.clientId,
+      task_linked: email.taskLinked
+    };
+    delete dbEmail.fromEmail;
+    delete dbEmail.to;
+    delete dbEmail.clientId;
+    delete dbEmail.taskLinked;
+    await supabase.from('emails').insert(dbEmail);
   };
 
   const deleteEmail = async (id: string) => {
     setEmails(prev => prev.filter(e => e.id !== id));
+    await supabase.from('emails').delete().eq('id', id);
   };
 
   const updateUser = async (id: string, updates: Partial<User>) => {
     setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
+    const dbUpdates: any = { ...updates };
+    if (updates.avatarUrl) { dbUpdates.avatar_url = updates.avatarUrl; delete dbUpdates.avatarUrl; }
+    await supabase.from('user_profiles').update(dbUpdates).eq('id', id);
   };
 
   const addUser = async (user: User) => {
     setUsers(prev => [user, ...prev]);
+    const dbUser: any = { ...user, avatar_url: user.avatarUrl };
+    delete dbUser.avatarUrl;
+    await supabase.from('user_profiles').insert(dbUser);
   };
 
   const deleteUser = async (id: string) => {
     setUsers(prev => prev.filter(u => u.id !== id));
+    await supabase.from('user_profiles').delete().eq('id', id);
   };
 
   const updateRole = async (id: string, updates: Partial<Role>) => {
     setRoles(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+    await supabase.from('roles').update(updates).eq('id', id);
   };
 
   const addRole = async (role: Role) => {
     setRoles(prev => [role, ...prev]);
+    await supabase.from('roles').insert(role);
   };
 
   const deleteRole = async (id: string) => {
     setRoles(prev => prev.filter(r => r.id !== id));
+    await supabase.from('roles').delete().eq('id', id);
   };
 
   return (
