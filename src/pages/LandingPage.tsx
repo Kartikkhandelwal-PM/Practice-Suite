@@ -115,7 +115,7 @@ export function LandingPage() {
           <div className="rounded-2xl border border-white/10 shadow-2xl overflow-hidden bg-white/5 p-2">
             <div className="rounded-xl overflow-hidden border border-white/10 bg-black/50">
               <img 
-                src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2070&auto=format&fit=crop" 
+                src="https://i.postimg.cc/PJry9gH0/Screenshot-2026-03-18-182149.png" 
                 alt="Dashboard Preview" 
                 className="w-full h-auto object-cover opacity-90"
                 referrerPolicy="no-referrer"
