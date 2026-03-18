@@ -63,7 +63,7 @@ function EmailAutocompleteInput({ value = '', onChange, placeholder, users, clie
 }
 
 export function InboxPage() {
-  const { emails, clients, users, currentUser, addEmail, updateEmail, deleteEmail } = useApp();
+  const { emails, clients, users, currentUser, addEmail, updateEmail, deleteEmail, addTask } = useApp();
   const toast = useToast();
 
   const [search, setSearch] = useState('');
@@ -433,12 +433,14 @@ export function InboxPage() {
                   {currentFolder === 'inbox' && (
                     <>
                       {!selectedEmail.taskLinked ? (
-                        <button 
-                          className="bg-[#d9534f] hover:bg-[#c9302c] text-white px-3 py-1.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 transition-colors shadow-sm"
-                          onClick={createTaskFromEmail}
-                        >
-                          <Plus size={14} /> <span className="hidden sm:inline">Create Task</span><span className="sm:hidden">Task</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            className="bg-[#d9534f] hover:bg-[#c9302c] text-white px-3 py-1.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 transition-colors shadow-sm"
+                            onClick={createTaskFromEmail}
+                          >
+                            <Plus size={14} /> <span className="hidden sm:inline">Convert to Task</span><span className="sm:hidden">Task</span>
+                          </button>
+                        </div>
                       ) : (
                         <button className="bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 cursor-default">
                           <CheckCircle2 size={14} /> <span className="hidden sm:inline">Task Linked</span>

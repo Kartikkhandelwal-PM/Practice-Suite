@@ -14,27 +14,38 @@ import {
   Mail,
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  LogOut
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export function Sidebar() {
-  const { users, sidebarCollapsed, setSidebarCollapsed, mobileMenuOpen, setMobileMenuOpen, currentUser } = useApp();
+  const { 
+    sidebarCollapsed, setSidebarCollapsed, 
+    mobileMenuOpen, setMobileMenuOpen, currentUser, 
+    hasPermission, logout 
+  } = useApp();
+
+  const handleLogout = () => {
+    logout();
+  };
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/' },
-    { id: 'inbox', label: 'Inbox', icon: Mail, path: '/inbox' },
-    { id: 'kanban', label: 'Kanban', icon: KanbanSquare, path: '/kanban' },
-    { id: 'tasks', label: 'All Tasks', icon: ListTodo, path: '/tasks' },
-    { id: 'templates', label: 'Templates', icon: LayoutTemplate, path: '/templates' },
-    { id: 'clients', label: 'Clients', icon: Users, path: '/clients' },
-    { id: 'documents', label: 'Documents', icon: FolderOpen, path: '/documents' },
-    { id: 'meetings', label: 'Meetings', icon: CalendarDays, path: '/meetings' },
-    { id: 'notes', label: 'Sticky Notes', icon: StickyNote, path: '/notes' },
-    { id: 'passwords', label: 'Passwords', icon: KeyRound, path: '/passwords' },
-    { id: 'compliance', label: 'Compliance', icon: FileText, path: '/compliance' },
-    { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/', permission: 'view_dashboard' },
+    { id: 'inbox', label: 'Inbox', icon: Mail, path: '/inbox', permission: 'view_tasks' },
+    { id: 'kanban', label: 'Kanban', icon: KanbanSquare, path: '/kanban', permission: 'view_tasks' },
+    { id: 'tasks', label: 'All Tasks', icon: ListTodo, path: '/tasks', permission: 'view_tasks' },
+    { id: 'templates', label: 'Templates', icon: LayoutTemplate, path: '/templates', permission: 'manage_settings' },
+    { id: 'clients', label: 'Clients', icon: Users, path: '/clients', permission: 'view_clients' },
+    { id: 'documents', label: 'Documents', icon: FolderOpen, path: '/documents', permission: 'view_tasks' },
+    { id: 'meetings', label: 'Meetings', icon: CalendarDays, path: '/meetings', permission: 'view_tasks' },
+    { id: 'notes', label: 'Sticky Notes', icon: StickyNote, path: '/notes', permission: 'view_tasks' },
+    { id: 'passwords', label: 'Passwords', icon: KeyRound, path: '/passwords', permission: 'manage_settings' },
+    { id: 'compliance', label: 'Compliance', icon: FileText, path: '/compliance', permission: 'view_compliance' },
+    { id: 'settings', label: 'Settings', icon: Settings, path: '/settings', permission: 'manage_settings' },
   ];
+
+  const filteredNavItems = navItems.filter(item => !item.permission || hasPermission(item.permission));
 
   return (
     <>
@@ -72,7 +83,7 @@ export function Sidebar() {
       <div className="flex-1 overflow-y-auto py-3 scrollbar-hide">
         {!sidebarCollapsed && <div className="text-[9px] font-bold tracking-widest uppercase text-white/20 px-4 pt-2 pb-1 animate-in fade-in">Menu</div>}
         <div className="space-y-1">
-          {navItems.map(item => (
+          {filteredNavItems.map(item => (
             <NavLink
               key={item.id}
               to={item.path}
@@ -110,17 +121,39 @@ export function Sidebar() {
           )}
         </button>
 
-        <div className={`flex items-center gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-white/5 transition-colors ${sidebarCollapsed ? 'justify-center' : ''}`}>
+        <div className={`flex items-center gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-white/5 transition-colors group ${sidebarCollapsed ? 'justify-center' : ''}`}>
           <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
-            {currentUser?.name.split(' ').map(w => w[0]).join('') || '??'}
+            {currentUser?.name ? (
+              currentUser.name.split(' ').length > 1 
+                ? currentUser.name.split(' ').map(w => w[0]).join('') 
+                : currentUser.name.slice(0, 2).toUpperCase()
+            ) : '??'}
           </div>
           {!sidebarCollapsed && (
-            <div className="min-w-0 animate-in fade-in">
-              <div className="text-[12.5px] font-semibold text-white truncate">{currentUser?.name}</div>
-              <div className="text-[11px] text-white/40 truncate">{currentUser?.role}</div>
+            <div className="min-w-0 flex-1 animate-in fade-in">
+              <div className="text-[12.5px] font-semibold text-white truncate">{currentUser?.name || 'User'}</div>
+              <div className="text-[11px] text-white/40 truncate">{currentUser?.role || 'Guest'}</div>
             </div>
           )}
+          {!sidebarCollapsed && (
+            <button 
+              onClick={(e) => { e.stopPropagation(); handleLogout(); }}
+              className="p-1.5 text-white/30 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all opacity-0 group-hover:opacity-100"
+              title="Logout"
+            >
+              <LogOut size={14} />
+            </button>
+          )}
         </div>
+        {sidebarCollapsed && (
+          <button 
+            onClick={handleLogout}
+            className="w-full flex justify-center p-2 text-white/30 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
+            title="Logout"
+          >
+            <LogOut size={18} />
+          </button>
+        )}
       </div>
       </div>
     </>

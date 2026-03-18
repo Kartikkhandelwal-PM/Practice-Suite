@@ -1,4 +1,4 @@
-import { Client, User, Task, Deadline, Template, Email, Note, Password, Document, Folder, Meeting, TaskTypeConfig, Workflow } from './types';
+import { Client, User, Task, Deadline, Template, Email, Note, Password, Document, Folder, Meeting, TaskTypeConfig, Workflow, Permission, Role } from './types';
 
 const today = new Date();
 const fmt = (d: Date) => {
@@ -7,6 +7,24 @@ const fmt = (d: Date) => {
 };
 const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 const subDays = (d: Date, n: number) => addDays(d, -n);
+
+export const INIT_PERMISSIONS: Permission[] = [
+  { id: 'view_dashboard', name: 'View Dashboard', description: 'Access to main dashboard and stats', module: 'Dashboard' },
+  { id: 'view_tasks', name: 'Manage Tasks', description: 'Create, edit and delete tasks', module: 'Tasks' },
+  { id: 'view_clients', name: 'View Clients', description: 'View client list and details', module: 'Clients' },
+  { id: 'manage_clients', name: 'Manage Clients', description: 'Add, edit and delete clients', module: 'Clients' },
+  { id: 'manage_team', name: 'Manage Team', description: 'Add and manage team members', module: 'Settings' },
+  { id: 'manage_roles', name: 'Manage Roles', description: 'Create and manage custom roles', module: 'Settings' },
+  { id: 'view_compliance', name: 'View Compliance', description: 'Access to compliance master', module: 'Compliance' },
+  { id: 'manage_settings', name: 'Manage Settings', description: 'Access to workspace configurations', module: 'Settings' },
+];
+
+export const INIT_ROLES: Role[] = [
+  { id: 'r1', name: 'Admin', description: 'Full access to all modules', permissions: ['view_dashboard', 'view_tasks', 'view_clients', 'manage_clients', 'manage_team', 'manage_roles', 'view_compliance', 'manage_settings'], isSystem: true },
+  { id: 'r2', name: 'Manager', description: 'Manage tasks and clients', permissions: ['view_dashboard', 'view_tasks', 'view_clients', 'manage_clients', 'view_compliance'], isSystem: true },
+  { id: 'r3', name: 'Staff', description: 'Execute assigned tasks', permissions: ['view_dashboard', 'view_tasks', 'view_clients', 'view_compliance'], isSystem: true },
+  { id: 'r4', name: 'Article Clerk', description: 'Limited access for articles', permissions: ['view_dashboard', 'view_tasks', 'view_compliance'], isSystem: true },
+];
 
 export const INIT_TASK_TYPES: TaskTypeConfig[] = [
   { id: 'tt1', name: 'Task', icon: 'check-square', color: '#3b82f6', workflowId: 'wf1' },

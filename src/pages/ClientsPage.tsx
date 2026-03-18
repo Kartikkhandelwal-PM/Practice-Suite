@@ -12,9 +12,10 @@ import { genUUID, fmt, today, daysLeft, TYPE_COLORS } from '../utils';
 import { Client, Task } from '../types';
 import { Pagination } from '../components/ui/Pagination';
 import { PageHeader } from '../components/ui/PageHeader';
+import { Coachmark } from '../components/ui/Coachmark';
 
 export function ClientsPage() {
-  const { clients, users, tasks, currentUser, addClient, updateClient, deleteClient } = useApp();
+  const { clients, users, tasks, currentUser, addClient, updateClient, deleteClient, addTask, addTasks } = useApp();
   const toast = useToast();
   const { confirm } = useConfirm();
 
@@ -57,12 +58,66 @@ export function ClientsPage() {
   const save = async () => {
     if (!form?.name || !form?.pan) { toast('Name and PAN are required', 'error'); return; }
     try {
-      if (clients.find(c => c.id === form.id)) {
+      const isNew = !clients.find(c => c.id === form.id);
+      if (!isNew) {
         await updateClient(form.id, form);
       } else {
         await addClient(form);
+        
+        // Auto-create tasks based on services
+        const newTasks: Task[] = [];
+        form.services.forEach(service => {
+          const parentId = genUUID();
+          newTasks.push({
+            id: parentId,
+            title: `Initial Setup & Compliance for ${service}`,
+            clientId: form.id,
+            type: service,
+            status: 'To Do',
+            priority: 'High',
+            assigneeId: form.manager,
+            reviewerId: '',
+            dueDate: fmt(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)), // 7 days from now
+            createdAt: fmt(today),
+            recurring: 'Monthly',
+            description: `Auto-generated task for ${service} compliance. Please review and set up necessary documents.`,
+            tags: ['auto-generated', 'onboarding'],
+            subtasks: [],
+            comments: [],
+            attachments: [],
+            activity: [{ text: 'Task auto-created during client onboarding', at: fmt(today) }]
+          });
+          
+          const subtaskTitles = ['Collect necessary documents', 'Verify credentials', 'Setup portal access'];
+          subtaskTitles.forEach(title => {
+            newTasks.push({
+              id: genUUID(),
+              parentId: parentId,
+              issueType: 'Subtask',
+              title: title,
+              clientId: form.id,
+              type: service,
+              status: 'To Do',
+              priority: 'Medium',
+              assigneeId: form.manager,
+              reviewerId: '',
+              dueDate: fmt(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+              createdAt: fmt(today),
+              recurring: 'One-time',
+              description: '',
+              tags: [],
+              subtasks: [],
+              comments: [],
+              attachments: [],
+              activity: []
+            });
+          });
+        });
+        
+        // Add all new tasks
+        await addTasks(newTasks);
       }
-      toast('Client saved', 'success');
+      toast(isNew ? 'Client saved and tasks auto-generated' : 'Client updated', 'success');
       setModal(null);
       setForm(null);
     } catch (error) {
@@ -92,6 +147,14 @@ export function ClientsPage() {
     const mgr = users.find(u => u.id === c.manager);
     const ct = tasks.filter(t => t.clientId === c.id);
     const active_t = ct.filter(t => t.status !== 'Completed');
+    
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+
+    const isCurrentMonth = (dateStr: string) => {
+      const d = new Date(dateStr);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    };
     
     return (
       <div className="animate-slide-up">
@@ -174,12 +237,14 @@ export function ClientsPage() {
                 )}
                 {ct.map(t => {
                   const a = users.find(u => u.id === t.assigneeId);
+                  const relevant = isCurrentMonth(t.dueDate);
                   return (
-                    <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => openEditTask(t)}>
+                    <tr key={t.id} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer ${!relevant ? 'opacity-40 grayscale-[0.5]' : ''}`} onClick={() => openEditTask(t)}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-mono text-gray-400">#{t.id}</span>
                           <span className="font-medium text-blue-600 hover:underline">{t.title}</span>
+                          {!relevant && <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">Future/Past</span>}
                           {t.subtasks && t.subtasks.length > 0 && (
                             <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded shrink-0" title={`${t.subtasks.filter(s => s.done).length}/${t.subtasks.length} subtasks done`}>
                               <GitMerge size={10} />
@@ -213,12 +278,14 @@ export function ClientsPage() {
             )}
             {ct.map(t => {
               const a = users.find(u => u.id === t.assigneeId);
+              const relevant = isCurrentMonth(t.dueDate);
               return (
-                <div key={t.id} className="p-4 hover:bg-gray-50 transition-colors" onClick={() => openEditTask(t)}>
+                <div key={t.id} className={`p-4 hover:bg-gray-50 transition-colors ${!relevant ? 'opacity-40 grayscale-[0.5]' : ''}`} onClick={() => openEditTask(t)}>
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-mono text-gray-400">#{t.id}</span>
                       <div className="font-bold text-[13px] text-blue-600">{t.title}</div>
+                      {!relevant && <span className="text-[9px] bg-gray-100 text-gray-400 px-1 py-0.5 rounded font-bold uppercase">Future/Past</span>}
                     </div>
                     <StatusBadge status={t.status} />
                   </div>
@@ -255,7 +322,7 @@ export function ClientsPage() {
         title="Clients" 
         description="Manage your client portfolio and their compliance status."
         action={
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-[14px] font-bold flex items-center gap-2 transition-all shadow-lg shadow-blue-200" onClick={openNew}>
+          <button id="add-client-btn" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-[14px] font-bold flex items-center gap-2 transition-all shadow-lg shadow-blue-200" onClick={openNew}>
             <Plus size={18} /> Add Client
           </button>
         }
@@ -413,6 +480,14 @@ export function ClientsPage() {
           itemsPerPage={itemsPerPage}
           currentPage={currentPage}
           onPageChange={setCurrentPage}
+        />
+
+        <Coachmark 
+          id="clients-onboarding"
+          title="Build Your Client Base"
+          content="Add your clients and specify their services to enable automated compliance tracking and task generation."
+          targetId="add-client-btn"
+          position="bottom"
         />
       </div>
 

@@ -6,7 +6,7 @@ import { ArrowRight, CheckCircle2, ShieldCheck, Sparkles, Building2, Mail, Lock,
 import { supabase } from '../lib/supabase';
 
 export function AuthPage() {
-  const { setIsAuthenticated } = useApp();
+  const { login } = useApp();
   const toast = useToast();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
@@ -20,47 +20,24 @@ export function AuthPage() {
 
     try {
       if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            data: {
-              full_name: fullName,
-            },
-          },
+            data: { full_name: fullName }
+          }
         });
         if (error) throw error;
-        toast('Account created! Please check your email for verification.', 'success');
-        setMode('login');
+        await login(data.session);
+        toast('Account created successfully!', 'success');
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-        if (error) {
-          if (email.toLowerCase() === 'kartikkhandelwal1104@gmail.com') {
-            // Attempt auto-signup via backend
-            const res = await fetch('/api/auth/login', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, password })
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error?.message || 'Authentication failed');
-            if (data.session) {
-              await supabase.auth.setSession({
-                access_token: data.session.access_token,
-                refresh_token: data.session.refresh_token
-              });
-            } else {
-              throw new Error('Demo account created. Please check your email to verify it before logging in.');
-            }
-          } else {
-            throw error;
-          }
-        }
+        if (error) throw error;
+        await login(data.session);
         toast('Welcome back!', 'success');
-        setIsAuthenticated(true);
       }
     } catch (error: any) {
       toast(error.message || 'Authentication failed', 'error');
@@ -203,7 +180,7 @@ export function AuthPage() {
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="name@company.com"
+                        placeholder="admin@kdk.com"
                         className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-[15px] outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
                         required
                       />

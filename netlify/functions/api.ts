@@ -2,11 +2,20 @@ import { Handler } from '@netlify/functions';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI } from "@google/genai";
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+
+// Initialize client only if URL is provided to avoid crash at startup
+const supabase = supabaseUrl ? createClient(supabaseUrl, supabaseServiceKey) : null;
 
 export const handler: Handler = async (event, context) => {
+  if (!supabase) {
+    return {
+      statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Supabase configuration missing on server. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Netlify environment variables.' })
+    };
+  }
   const path = event.path.replace('/.netlify/functions/api', '').replace('/api', '');
   const method = event.httpMethod;
   const body = event.body ? JSON.parse(event.body) : {};

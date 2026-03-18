@@ -8,7 +8,7 @@ import { TagInput } from './TagInput';
 import { SearchableSelect } from './SearchableSelect';
 import { IconRenderer } from './IconRenderer';
 import { RichTextEditor } from './RichTextEditor';
-import { Plus, X, Trash2, Eye, Paperclip, MessageSquare, Clock, User, GitMerge, ListTodo, Calendar, Reply, Tag as TagIcon, Smile } from 'lucide-react';
+import { Plus, X, Trash2, Eye, Paperclip, MessageSquare, Clock, User, GitMerge, ListTodo, Calendar, Reply, Tag as TagIcon, Smile, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { MentionTextarea } from './MentionTextarea';
 
@@ -22,27 +22,37 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
   const { tasks, clients, users, templates, taskTypes, workflows, notify, currentUser, addTask, updateTask, deleteTask } = useApp();
   const toast = useToast();
 
-  const [form, setForm] = useState<Task>(task || {
-    id: '', // Empty ID means new task
-    title: '',
-    clientId: '',
-    type: 'GST',
-    issueType: 'Task',
-    status: 'To Do',
-    priority: 'Medium',
-    assigneeId: currentUser?.id || 'u1',
-    reporterId: currentUser?.id || 'u1',
-    reviewerId: '',
-    dueDate: fmt(today),
-    createdAt: fmt(today),
-    recurring: 'One-time',
-    description: '',
-    tags: [],
-    subtasks: [],
-    linkedTasks: [],
-    comments: [],
-    attachments: [],
-    activity: [{ text: 'Task created', at: fmt(today) }]
+  const [form, setForm] = useState<Task>(() => {
+    if (task) {
+      if (!task.id && task.subtasks && task.subtasks.length > 0) {
+        return { ...task, subtasks: [] };
+      }
+      return { ...task };
+    }
+    return {
+      id: '', // Empty ID means new task
+      title: '',
+      clientId: '',
+      type: 'GST',
+      issueType: 'Task',
+      status: 'To Do',
+      priority: 'Medium',
+      assigneeId: currentUser?.id || 'u1',
+      reporterId: currentUser?.id || 'u1',
+      reviewerId: '',
+      dueDate: fmt(today),
+      createdAt: fmt(today),
+      recurring: 'One-time',
+      description: '',
+      tags: [],
+      dependencies: [],
+      statutoryDeadline: '',
+      subtasks: [],
+      linkedTasks: [],
+      comments: [],
+      attachments: [],
+      activity: [{ text: 'Task created', at: fmt(today) }]
+    };
   });
 
   const [selectedTemplate, setSelectedTemplate] = useState(templateId || '');
@@ -559,6 +569,16 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
                       onChange={linkExistingAsSubtask} 
                       placeholder="Link existing task..." 
                     />
+                    <button 
+                      onClick={() => {
+                        const newSubtasks = [...(form.subtasks || []), { id: genUUID(), title: 'New Checklist Item', done: false }];
+                        setForm({ ...form, subtasks: newSubtasks });
+                      }}
+                      className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-[12px] font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 size={14} className="text-blue-600" />
+                      Add Checklist
+                    </button>
                   </div>
                 </div>
                 
@@ -582,8 +602,43 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
                   </div>
 
                   <div className="border border-gray-200 rounded-xl bg-white shadow-sm">
-                    {(childTasks.length > 0 || pendingSubtasks.length > 0) ? (
+                    {(childTasks.length > 0 || pendingSubtasks.length > 0 || (form.subtasks && form.subtasks.length > 0)) ? (
                       <div className="divide-y divide-gray-100">
+                        {form.subtasks?.map((st, idx) => (
+                          <div key={st.id} className="relative focus-within:z-10 flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors group">
+                            <input 
+                              type="checkbox" 
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" 
+                              checked={st.done} 
+                              onChange={e => {
+                                const newSubtasks = [...(form.subtasks || [])];
+                                newSubtasks[idx] = { ...st, done: e.target.checked };
+                                setForm({ ...form, subtasks: newSubtasks });
+                              }} 
+                            />
+                            <div className="flex-1 min-w-0 flex items-center gap-2">
+                              <span className="text-[10px] font-mono text-gray-400">CHK</span>
+                              <input 
+                                className={`w-full bg-transparent border-none p-0 text-[13px] outline-none focus:ring-0 font-medium ${st.done ? 'line-through text-gray-400' : 'text-gray-900'}`} 
+                                value={st.title} 
+                                onChange={e => {
+                                  const newSubtasks = [...(form.subtasks || [])];
+                                  newSubtasks[idx] = { ...st, title: e.target.value };
+                                  setForm({ ...form, subtasks: newSubtasks });
+                                }} 
+                              />
+                            </div>
+                            <button 
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100" 
+                              onClick={() => {
+                                const newSubtasks = form.subtasks?.filter((_, i) => i !== idx);
+                                setForm({ ...form, subtasks: newSubtasks });
+                              }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
                         {pendingSubtasks.map((pst, idx) => (
                           <div key={`pending-${idx}`} className="relative focus-within:z-10 flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors group">
                             <input 
@@ -905,6 +960,23 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
                 />
               </div>
             </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-widest flex items-center gap-1.5">
+                <AlertCircle size={12} className="text-orange-500" />
+                Statutory Deadline
+              </label>
+              <div className="relative">
+                <Clock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input 
+                  className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-[13.5px] font-medium outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50 bg-white transition-all" 
+                  type="date" 
+                  value={form.statutoryDeadline || ''} 
+                  onChange={e => setForm({ ...form, statutoryDeadline: e.target.value })} 
+                />
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1.5 px-1 italic">Statutory deadline for compliance prioritization.</p>
+            </div>
           </div>
 
           <div className="bg-gray-50/50 border border-gray-200 rounded-2xl p-5 space-y-5">
@@ -918,6 +990,36 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">Parent Task</label>
                   <SearchableSelect options={parentOptions} value={form.parentId || ''} onChange={v => setForm({ ...form, parentId: v || undefined })} placeholder="None" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1.5 flex items-center gap-1.5">
+                    <GitMerge size={12} className="text-blue-500" />
+                    Dependencies
+                  </label>
+                  <SearchableSelect 
+                    options={linkedTaskOptions.filter(o => o.value !== form.id)} 
+                    value="" 
+                    onChange={v => {
+                      const deps = form.dependencies || [];
+                      if (!deps.includes(v)) {
+                        setForm({ ...form, dependencies: [...deps, v] });
+                      }
+                    }} 
+                    placeholder="Add dependency..." 
+                  />
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {(form.dependencies || []).map(depId => {
+                      const depTask = tasks.find(t => t.id === depId);
+                      return (
+                        <div key={depId} className="flex items-center gap-1.5 bg-blue-50 text-blue-600 px-2 py-1 rounded-lg text-[10px] font-bold border border-blue-100 group">
+                          <span className="font-mono">#{depId}</span>
+                          <button onClick={() => setForm({ ...form, dependencies: (form.dependencies || []).filter(d => d !== depId) })} className="hover:text-red-500 transition-colors">
+                            <X size={10} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">Tags</label>

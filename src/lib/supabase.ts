@@ -1,20 +1,4 @@
-// This is a proxy that redirects Supabase calls to our server-side API
-// to keep keys and secrets hidden from the browser.
-
-const apiFetch = async (path: string, options: any = {}) => {
-  const session = JSON.parse(localStorage.getItem('sb-session') || 'null');
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
-    ...options.headers
-  };
-
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  const data = await res.json();
-  if (!res.ok) throw data.error || new Error(data.message || 'API Error');
-  return { data, error: null };
-};
-
+// This client proxies all calls to the backend API to keep keys secure.
 export const supabase: any = {
   auth: {
     getSession: async () => {
@@ -23,13 +7,15 @@ export const supabase: any = {
     },
     signInWithPassword: async ({ email, password }: any) => {
       try {
-        const { data } = await apiFetch('/auth/login', {
+        const response = await fetch('/api/auth/login', {
           method: 'POST',
-          body: JSON.stringify({ email, password })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
         });
-        if (data.session) {
-          localStorage.setItem('sb-session', JSON.stringify(data.session));
-        }
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Login failed');
+        
+        localStorage.setItem('sb-session', JSON.stringify(data.session));
         return { data, error: null };
       } catch (error: any) {
         return { data: null, error };
@@ -37,10 +23,15 @@ export const supabase: any = {
     },
     signUp: async ({ email, password, options }: any) => {
       try {
-        const { data } = await apiFetch('/auth/signup', {
+        const response = await fetch('/api/auth/signup', {
           method: 'POST',
-          body: JSON.stringify({ email, password, options })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, name: options?.data?.full_name }),
         });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Signup failed');
+        
+        localStorage.setItem('sb-session', JSON.stringify(data.session));
         return { data, error: null };
       } catch (error: any) {
         return { data: null, error };
@@ -50,53 +41,118 @@ export const supabase: any = {
       localStorage.removeItem('sb-session');
       return { error: null };
     },
-    setSession: async ({ access_token, refresh_token }: any) => {
-      localStorage.setItem('sb-session', JSON.stringify({ access_token, refresh_token }));
-      return { data: { session: { access_token, refresh_token } }, error: null };
-    },
     onAuthStateChange: (callback: any) => {
       const handleStorage = () => {
         const session = JSON.parse(localStorage.getItem('sb-session') || 'null');
         callback('SIGNED_IN', session);
       };
       window.addEventListener('storage', handleStorage);
-      setTimeout(handleStorage, 0); // Trigger initial
+      setTimeout(handleStorage, 0);
       return { data: { subscription: { unsubscribe: () => window.removeEventListener('storage', handleStorage) } } };
     }
   },
   from: (table: string) => {
-    const createQuery = (path: string, options: any = {}) => {
-      const promise = apiFetch(path, options);
-      
-      const chain: any = promise;
-      chain.eq = (column: string, value: any) => {
-        const newPath = path.includes('?') ? `${path}&${column}=eq.${value}` : `${path}?${column}=eq.${value}`;
-        return createQuery(newPath, options);
-      };
-      chain.contains = (column: string, value: any) => {
-        const newPath = path.includes('?') ? `${path}&${column}=cs.${JSON.stringify(value)}` : `${path}?${column}=cs.${JSON.stringify(value)}`;
-        return createQuery(newPath, options);
-      };
-      chain.select = (query: string = '*') => {
-        const newPath = path.includes('?') ? `${path}&select=${query}` : `${path}?select=${query}`;
-        return createQuery(newPath, options);
-      };
-      chain.limit = () => chain; // Mock limit
-      return chain;
-    };
-
-    return {
-      select: (query: string = '*') => createQuery(`/data/${table}?select=${query}`),
-      insert: (data: any) => {
-        const promise = createQuery(`/data/${table}`, { method: 'POST', body: JSON.stringify(data) });
-        return promise;
+    const mockQuery = {
+      select: (columns: string = '*') => {
+        const query: any = {
+          eq: (field: string, value: any) => {
+            query._eq = { field, value };
+            return query;
+          },
+          single: async () => {
+            const url = new URL(`/api/data/${table}`, window.location.origin);
+            url.searchParams.append('select', columns);
+            if (query._eq) {
+              url.searchParams.append('eq_field', query._eq.field);
+              url.searchParams.append('eq_value', query._eq.value);
+            }
+            const res = await fetch(url.toString());
+            const data = await res.json();
+            if (!res.ok) return { data: null, error: new Error(data.error || 'Fetch failed') };
+            return { data: Array.isArray(data) ? data[0] : data, error: null };
+          },
+          maybeSingle: async () => {
+            const url = new URL(`/api/data/${table}`, window.location.origin);
+            url.searchParams.append('select', columns);
+            if (query._eq) {
+              url.searchParams.append('eq_field', query._eq.field);
+              url.searchParams.append('eq_value', query._eq.value);
+            }
+            const res = await fetch(url.toString());
+            const data = await res.json();
+            if (!res.ok) return { data: null, error: new Error(data.error || 'Fetch failed') };
+            return { data: Array.isArray(data) ? data[0] : data, error: null };
+          },
+          order: () => query,
+          limit: () => query,
+          then: async (cb: any) => {
+            const url = new URL(`/api/data/${table}`, window.location.origin);
+            url.searchParams.append('select', columns);
+            if (query._eq) {
+              url.searchParams.append('eq_field', query._eq.field);
+              url.searchParams.append('eq_value', query._eq.value);
+            }
+            const res = await fetch(url.toString());
+            const data = await res.json();
+            cb({ 
+              data: res.ok ? (Array.isArray(data) ? data : []) : null, 
+              error: res.ok ? null : new Error(data.error || 'Fetch failed') 
+            });
+          }
+        };
+        return query;
       },
-      update: (data: any) => ({
-        eq: (column: string, value: any) => createQuery(`/data/${table}/${value}`, { method: 'PATCH', body: JSON.stringify(data) })
-      }),
-      delete: () => ({
-        eq: (column: string, value: any) => createQuery(`/data/${table}/${value}`, { method: 'DELETE' })
-      })
+      insert: async (payload: any) => {
+        const res = await fetch(`/api/data/${table}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        return { 
+          data: res.ok ? data : null, 
+          error: res.ok ? null : new Error(data.error || 'Insert failed') 
+        };
+      },
+      update: (payload: any) => {
+        const query: any = {
+          eq: (field: string, value: any) => {
+            query._eq = { field, value };
+            return query;
+          },
+          select: () => ({
+            single: async () => {
+              const res = await fetch(`/api/data/${table}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...payload, id: query._eq?.value }),
+              });
+              const data = await res.json();
+              return { 
+                data: res.ok ? data : null, 
+                error: res.ok ? null : new Error(data.error || 'Update failed') 
+              };
+            }
+          })
+        };
+        return query;
+      },
+      delete: () => {
+        const query: any = {
+          eq: (field: string, value: any) => {
+            query._eq = { field, value };
+            return query;
+          },
+          then: async (cb: any) => {
+            const url = new URL(`/api/data/${table}`, window.location.origin);
+            url.searchParams.append('id', query._eq?.value);
+            const res = await fetch(url.toString(), { method: 'DELETE' });
+            cb({ error: res.ok ? null : new Error('Delete failed') });
+          }
+        };
+        return query;
+      }
     };
+    return mockQuery;
   }
 };

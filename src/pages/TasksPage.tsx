@@ -2,8 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { daysLeft, STATUS_COLORS, PRIORITY_COLORS, canTransition } from '../utils';
-import { Plus, Search, ChevronDown, ChevronUp, Check, Trash2, Maximize2, ListTodo, GitMerge, Filter, Calendar, X, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { daysLeft, STATUS_COLORS, PRIORITY_COLORS, canTransition, today, fmt } from '../utils';
+import { Plus, Search, ChevronDown, ChevronUp, Check, Trash2, Maximize2, ListTodo, GitMerge, Filter, Calendar, X, Clock, CheckCircle2, AlertCircle, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TypeChip, StatusBadge, PriorityBadge } from '../components/ui/Badges';
 import { Avatar } from '../components/ui/Avatar';
@@ -13,6 +13,7 @@ import { Task } from '../types';
 import { Pagination } from '../components/ui/Pagination';
 import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../components/ui/PageHeader';
+import { Coachmark } from '../components/ui/Coachmark';
 
 export function TasksPage() {
   const { tasks, clients, users, taskTypes, workflows, currentUser, updateTask: persistUpdateTask, deleteTask: persistDeleteTask } = useApp();
@@ -41,6 +42,35 @@ export function TasksPage() {
     !!(searchParams.get('status') || searchParams.get('client') || searchParams.get('type') || searchParams.get('issueType') || searchParams.get('priority') || searchParams.get('assignee') || searchParams.get('start') || searchParams.get('end'))
   );
   
+  const [view, setView] = useState<'list' | 'calendar'>('list');
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    const hasSeenOnboarding = localStorage.getItem('has-seen-tasks-onboarding');
+    if (!hasSeenOnboarding && tasks.length < 5) {
+      setShowOnboarding(true);
+    }
+  }, [tasks.length]);
+
+  const dismissOnboarding = () => {
+    localStorage.setItem('has-seen-tasks-onboarding', 'true');
+    setShowOnboarding(false);
+  };
+  const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
+  const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay();
+  
+  const calDays: (Date | null)[] = [];
+  for (let i = 0; i < firstDay; i++) calDays.push(null);
+  for (let i = 1; i <= daysInMonth; i++) calDays.push(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), i));
+
+  const getTasksForDate = (date: Date) => {
+    const ds = fmt(date);
+    return filtered.filter(t => t.dueDate === ds);
+  };
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -66,6 +96,31 @@ export function TasksPage() {
 
   const openNewTask = () => {
     setEditingTask(null);
+    setIsModalOpen(true);
+  };
+
+  const openAddTaskOnDate = (date: Date) => {
+    setEditingTask({
+      id: '',
+      title: '',
+      clientId: '',
+      type: 'GST',
+      status: 'To Do',
+      priority: 'Medium',
+      assigneeId: currentUser?.id || '',
+      reviewerId: '',
+      dueDate: fmt(date),
+      createdAt: fmt(new Date()),
+      recurring: 'One-time',
+      description: '',
+      tags: [],
+      subtasks: [],
+      comments: [],
+      attachments: [],
+      activity: [],
+      dependencies: [],
+      statutoryDeadline: ''
+    } as Task);
     setIsModalOpen(true);
   };
 
@@ -146,6 +201,18 @@ export function TasksPage() {
     }
 
     return [...t].sort((a, b) => {
+      // Prioritize by statutory deadline if it exists and is closer than dueDate
+      const aStat = a.statutoryDeadline || '9999-99-99';
+      const bStat = b.statutoryDeadline || '9999-99-99';
+      
+      if (sortCol === 'dueDate') {
+        // If both have statutory deadlines, prioritize the closer one
+        if (aStat !== '9999-99-99' || bStat !== '9999-99-99') {
+          if (aStat < bStat) return -1;
+          if (aStat > bStat) return 1;
+        }
+      }
+
       const av = sortCol === 'dueDate' ? (a[sortCol] || '9999-99-99') : (a[sortCol] || '');
       const bv = sortCol === 'dueDate' ? (b[sortCol] || '9999-99-99') : (b[sortCol] || '');
       return av < bv ? -sortDir : av > bv ? sortDir : 0;
@@ -224,7 +291,68 @@ export function TasksPage() {
         }
       />
 
+      {/* Onboarding Nudge */}
+      <AnimatePresence>
+        {showOnboarding && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="mb-6 bg-blue-600 rounded-2xl p-6 text-white shadow-lg shadow-blue-200 relative overflow-hidden mx-4 md:mx-0"
+          >
+            <div className="absolute top-0 right-0 p-4">
+              <button onClick={dismissOnboarding} className="text-white/60 hover:text-white transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="flex items-start gap-6 relative z-10">
+              <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0 border border-white/20">
+                <Sparkles size={24} className="text-white" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-xl font-bold mb-2">Welcome to your Task Workspace!</h3>
+                <p className="text-white/80 text-[15px] leading-relaxed mb-4 max-w-2xl">
+                  This is where you'll manage all your compliance and practice tasks. You can switch between a List view for efficiency or a Calendar view for better visibility of deadlines.
+                </p>
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => { setView('calendar'); dismissOnboarding(); }}
+                    className="bg-white text-blue-600 px-4 py-2 rounded-lg text-[14px] font-bold hover:bg-blue-50 transition-colors"
+                  >
+                    Try Calendar View
+                  </button>
+                  <button 
+                    onClick={dismissOnboarding}
+                    className="text-white/80 hover:text-white text-[14px] font-medium transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+            {/* Decorative circles */}
+            <div className="absolute -bottom-12 -right-12 w-48 h-48 rounded-full bg-white/10 blur-3xl" />
+            <div className="absolute -top-12 -left-12 w-32 h-32 rounded-full bg-blue-400/20 blur-2xl" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex gap-2 items-center flex-wrap mb-4">
+        <div className="flex bg-gray-100/50 p-1 rounded-xl border border-gray-200 shrink-0 mr-2">
+          <button 
+            onClick={() => setView('list')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${view === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <ListTodo size={16} /> <span>List</span>
+          </button>
+          <button 
+            onClick={() => setView('calendar')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${view === 'calendar' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <Calendar size={16} /> <span>Calendar</span>
+          </button>
+        </div>
+
         <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 w-[220px] focus-within:border-blue-600 transition-colors">
           <Search size={14} className="text-gray-400 shrink-0" />
           <input 
@@ -382,12 +510,13 @@ export function TasksPage() {
         </div>
       )}
 
-      <motion.div 
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
-      >
+      {view === 'list' ? (
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
+        >
         {/* Desktop Table View */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full border-collapse text-left">
@@ -474,16 +603,33 @@ export function TasksPage() {
                       <td className="px-3.5 py-2.5">
                         <div className="flex items-center gap-2">
                           <div className="font-medium text-blue-600 hover:underline cursor-pointer" onClick={() => openEditTask(t)}>{t.title}</div>
+                          {t.subtasks && t.subtasks.length > 0 && (
+                            <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded" title={`${t.subtasks.filter(s => s.done).length}/${t.subtasks.length} checklist items done`}>
+                              <CheckCircle2 size={10} />
+                              <span>{t.subtasks.filter(s => s.done).length}/{t.subtasks.length}</span>
+                            </div>
+                          )}
                           {childTasks.length > 0 && (
-                            <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded" title={`${childTasks.filter(s => s.status === 'Completed').length}/${childTasks.length} subtasks done`}>
+                            <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded" title={`${childTasks.filter(s => s.status === 'Completed').length}/${childTasks.length} linked subtasks done`}>
                               <GitMerge size={10} />
                               <span>{childTasks.filter(s => s.status === 'Completed').length}/{childTasks.length}</span>
+                            </div>
+                          )}
+                          {t.dependencies && t.dependencies.length > 0 && (
+                            <div className="flex items-center gap-1 text-[10px] text-orange-600 bg-orange-50 border border-orange-100 px-1.5 py-0.5 rounded" title={`${t.dependencies.length} dependencies`}>
+                              <GitMerge size={10} />
+                              <span>{t.dependencies.length} deps</span>
                             </div>
                           )}
                         </div>
                         {t.tags && t.tags.length > 0 && (
                           <div className="flex gap-1 mt-1 flex-wrap">
                             {t.tags.map(g => <span key={g} className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[10px] font-semibold">{g}</span>)}
+                          </div>
+                        )}
+                        {t.statutoryDeadline && (
+                          <div className="flex items-center gap-1 mt-1 text-[10px] text-orange-600 font-bold">
+                            <AlertCircle size={10} /> Statutory: {t.statutoryDeadline}
                           </div>
                         )}
                       </td>
@@ -897,6 +1043,105 @@ export function TasksPage() {
           onPageChange={setCurrentPage}
         />
       </motion.div>
+      ) : (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm flex-1 flex flex-col min-h-[800px]"
+        >
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+            <div className="flex items-center gap-4">
+              <h2 className="text-lg font-bold text-gray-900">
+                {MONTHS[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+              </h2>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setCurrentMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))} className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-gray-200"><ChevronLeft size={18} /></button>
+                <button onClick={() => setCurrentMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))} className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-gray-200"><ChevronRight size={18} /></button>
+              </div>
+            </div>
+            <button 
+              onClick={() => setCurrentMonth(new Date())}
+              className="px-3 py-1.5 text-[12px] font-semibold text-gray-600 hover:bg-white rounded-lg border border-gray-200 transition-colors"
+            >
+              Today
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto">
+            <div className="min-w-[800px] h-full flex flex-col">
+              <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50/30">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                  <div key={d} className="py-2 text-center text-[11px] font-bold text-gray-400 uppercase tracking-widest">{d}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 bg-gray-200 gap-[1px] flex-1">
+                {calDays.map((d, i) => {
+                  if (!d) return <div key={`empty-${i}`} className="bg-gray-50"></div>;
+                  const ds = fmt(d);
+                  const dt = getTasksForDate(d);
+                  const isToday = fmt(today) === ds;
+                  
+                  return (
+                    <div 
+                      key={ds} 
+                      className={`bg-white p-2 min-h-[160px] transition-colors relative group ${isToday ? 'bg-blue-50/30' : 'hover:bg-gray-50'}`}
+                      onClick={() => openAddTaskOnDate(d)}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className={`text-[12px] font-bold w-6 h-6 flex items-center justify-center rounded-lg ${isToday ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-700'}`}>
+                          {d.getDate()}
+                        </div>
+                        <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded transition-all text-gray-400">
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                      <div className="space-y-1 overflow-y-auto max-h-[110px] no-scrollbar">
+                        {dt.map(t => {
+                          const taskType = taskTypes.find(type => type.name === (t.issueType || 'Task'));
+                          const hasDeps = t.dependencies && t.dependencies.length > 0;
+                          return (
+                            <motion.div 
+                              key={t.id} 
+                              initial={{ opacity: 0, x: -5 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              className={`p-1.5 rounded-lg border text-[10px] font-bold cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md flex items-start gap-2 group/task ${
+                                t.status === 'Completed' ? 'bg-emerald-50 border-emerald-100 text-emerald-700 opacity-60' :
+                                t.priority === 'High' ? 'bg-red-50 border-red-100 text-red-700' :
+                                t.priority === 'Medium' ? 'bg-orange-50 border-orange-100 text-orange-700' :
+                                'bg-blue-50 border-blue-100 text-blue-700'
+                              }`}
+                              onClick={(e) => { e.stopPropagation(); openEditTask(t); }}
+                            >
+                              <div className="w-4 h-4 rounded flex items-center justify-center text-white shrink-0 mt-0.5" style={{ backgroundColor: taskType?.color || '#3b82f6' }}>
+                                <IconRenderer name={taskType?.icon || 'check-square'} size={10} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-1 mb-0.5">
+                                  <span className="text-[8px] font-mono opacity-50">#{t.id}</span>
+                                  {hasDeps && <GitMerge size={9} className="shrink-0 text-gray-400" />}
+                                </div>
+                                <div className="truncate leading-tight">{t.title}</div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          
+          <div id="calendar-view-container" className="absolute top-0 left-0 w-full h-full pointer-events-none" />
+          <Coachmark 
+            id="calendar-view-onboarding"
+            title="Master Your Schedule"
+            content="The calendar view helps you visualize deadlines and dependencies. Drag and drop tasks to reschedule (coming soon!)."
+            targetId="calendar-view-container"
+            position="top"
+          />
+        </motion.div>
+      )}
 
       {isModalOpen && (
         <TaskModal

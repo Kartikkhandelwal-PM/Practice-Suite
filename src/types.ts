@@ -74,6 +74,8 @@ export interface Task {
   tags: string[];
   parentId?: string;
   linkedTasks?: string[];
+  dependencies?: string[];
+  statutoryDeadline?: string;
   subtasks: Subtask[];
   comments: Comment[];
   attachments: Attachment[];
@@ -225,4 +227,20 @@ export interface AppNotification {
   read: boolean;
   type: 'mention' | 'task' | 'meeting';
   link?: string;
+}
+
+export interface Permission {
+  id: string;
+  name: string;
+  description: string;
+  module: string;
+}
+
+export interface Role {
+  id: string;
+  profile_id?: string;
+  name: string;
+  description: string;
+  permissions: string[]; // Array of permission IDs
+  isSystem?: boolean;
 }

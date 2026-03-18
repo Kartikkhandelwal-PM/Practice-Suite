@@ -171,12 +171,12 @@ export function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.2 }}
-          className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col shadow-sm"
+          className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col shadow-sm lg:col-span-2"
         >
           <div className="flex items-center gap-2.5 p-4 border-b border-gray-200">
             <AlertCircle size={15} className="text-red-600" />
@@ -188,32 +188,55 @@ export function DashboardPage() {
             {overdue.slice(0, 5).map(t => {
               const c = clients.find(x => x.id === t.clientId);
               const a = users.find(x => x.id === t.assigneeId);
+              const tt = taskTypes.find(type => type.name === t.type);
+              
               return (
-                <div key={t.id} className="flex items-center gap-2.5 px-4.5 py-2.5 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => openEditTask(t)}>
-                  <TypeChip type={t.type} />
+                <div key={t.id} className="flex items-center gap-2.5 px-4.5 py-2.5 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors group" onClick={() => openEditTask(t)}>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${tt?.color || '#3b82f6'}15`, color: tt?.color || '#3b82f6' }}>
+                    <FileText size={16} />
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-gray-400">#{t.id}</span>
-                      <div className="font-medium text-[13px] truncate text-gray-900">{t.title}</div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-1 rounded border border-gray-100">#{t.id}</span>
+                      <div className="font-medium text-[13px] truncate text-gray-900 group-hover:text-blue-600 transition-colors">{t.title}</div>
                       {t.subtasks && t.subtasks.length > 0 && (
-                        <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded shrink-0" title={`${t.subtasks.filter(s => s.done).length}/${t.subtasks.length} subtasks done`}>
-                          <GitMerge size={10} />
+                        <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded shrink-0" title={`${t.subtasks.filter(s => s.done).length}/${t.subtasks.length} checklist items done`}>
+                          <CheckCircle2 size={10} />
                           <span>{t.subtasks.filter(s => s.done).length}/{t.subtasks.length}</span>
                         </div>
                       )}
+                      {tasks.filter(ct => ct.parentId === t.id).length > 0 && (
+                        <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded shrink-0" title={`${tasks.filter(ct => ct.parentId === t.id && ct.status === 'Completed').length}/${tasks.filter(ct => ct.parentId === t.id).length} linked subtasks done`}>
+                          <GitMerge size={10} />
+                          <span>{tasks.filter(ct => ct.parentId === t.id && ct.status === 'Completed').length}/{tasks.filter(ct => ct.parentId === t.id).length}</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="text-[11px] text-gray-500">{c?.name || '—'}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-[11px] text-gray-500 truncate max-w-[120px]">{c?.name || '—'}</div>
+                      {t.tags && t.tags.length > 0 && (
+                        <div className="flex items-center gap-1 overflow-hidden">
+                          {t.tags.slice(0, 2).map(tag => (
+                            <span key={tag} className="text-[9px] px-1.5 py-0.25 bg-gray-100 text-gray-500 rounded-full border border-gray-200 uppercase tracking-wider font-semibold">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 text-[10.5px] font-bold px-1.5 py-0.5 rounded">
-                    {Math.abs(daysLeft(t.dueDate) || 0)}d
-                  </span>
-                  <Avatar user={a} size={24} />
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 text-[10.5px] font-bold px-1.5 py-0.5 rounded">
+                      {Math.abs(daysLeft(t.dueDate) || 0)}d
+                    </span>
+                    <Avatar user={a} size={20} />
+                  </div>
                   <button 
-                    className="ml-2 w-6 h-6 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 transition-colors"
+                    className="ml-1 w-7 h-7 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 transition-colors shrink-0"
                     onClick={(e) => markComplete(t.id, e)}
                     title="Mark Complete"
                   >
-                    <CheckCircle size={12} />
+                    <CheckCircle size={14} />
                   </button>
                 </div>
               );
@@ -221,6 +244,73 @@ export function DashboardPage() {
           </div>
         </motion.div>
 
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.25 }}
+          className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col shadow-sm"
+        >
+          <div className="flex items-center gap-2.5 p-4 border-b border-gray-200">
+            <Zap size={15} className="text-blue-600" />
+            <h3 className="text-[14px] font-semibold flex-1">KDK Sync</h3>
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Live</span>
+            </div>
+          </div>
+          <div className="p-5 flex flex-col gap-4">
+            <div className="text-[12px] text-gray-600 leading-relaxed">
+              Automated connection with <span className="font-bold text-gray-900">KDK Sync</span> for real-time compliance tracking and direct filing.
+            </div>
+            
+            <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-100">
+              <div className="flex items-center justify-between mb-2.5">
+                <div className="flex flex-col">
+                  <span className="text-[12px] font-bold text-gray-800">ITR Filing Progress</span>
+                  <span className="text-[10px] text-gray-500">Overall practice status</span>
+                </div>
+                <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">85%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="bg-emerald-500 h-2 rounded-full transition-all duration-1000" style={{ width: '85%' }}></div>
+              </div>
+              <div className="flex justify-between mt-2">
+                <span className="text-[10px] font-medium text-gray-500">120/141 Filed</span>
+                <span className="text-[10px] font-medium text-amber-600">21 Pending</span>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-100">
+              <div className="flex items-center justify-between mb-2.5">
+                <div className="flex flex-col">
+                  <span className="text-[12px] font-bold text-gray-800">GST Returns</span>
+                  <span className="text-[10px] text-gray-500">Current month filing</span>
+                </div>
+                <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">92%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="bg-blue-500 h-2 rounded-full transition-all duration-1000" style={{ width: '92%' }}></div>
+              </div>
+              <div className="flex justify-between mt-2">
+                <span className="text-[10px] font-medium text-gray-500">66/72 Filed</span>
+                <span className="text-[10px] font-medium text-blue-600">Syncing...</span>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => navigate('/compliance')}
+              className="mt-auto w-full py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-[13px] font-bold transition-colors flex items-center justify-center gap-2"
+            >
+              <Zap size={14} /> View Compliance
+            </button>
+          </div>
+        </motion.div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -268,9 +358,7 @@ export function DashboardPage() {
             })}
           </div>
         </motion.div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -279,17 +367,24 @@ export function DashboardPage() {
         >
           <div className="flex items-center gap-2.5 p-4 border-b border-gray-200">
             <ShieldAlert size={15} className="text-amber-600" />
-            <h3 className="text-[14px] font-semibold flex-1">Compliance Deadlines — Next 7 Days</h3>
+            <h3 className="text-[14px] font-semibold flex-1">Compliance Deadlines</h3>
           </div>
           <div className="overflow-y-auto max-h-[300px]">
             {urgent.length === 0 && <div className="flex flex-col items-center justify-center p-8 text-gray-500"><p>No urgent deadlines.</p></div>}
             {urgent.map(d => {
               const dl = daysLeft(d.dueDate) || 0;
               return (
-                <div key={d.id} className="flex items-center gap-2.5 px-4.5 py-2.5 border-b border-gray-100">
-                  <TypeChip type={d.category} />
+                <div key={d.id} className="flex items-center gap-2.5 px-4.5 py-2.5 border-b border-gray-100 group hover:bg-gray-50 transition-colors">
+                  <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                    <ShieldAlert size={16} />
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-[13px]">{d.title}</div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <div className="font-medium text-[13px] text-gray-900">{d.title}</div>
+                      <span className="text-[9px] px-1.5 py-0.25 bg-gray-100 text-gray-500 rounded-full border border-gray-200 uppercase tracking-wider font-semibold">
+                        {d.category}
+                      </span>
+                    </div>
                     <div className="text-[11px] text-gray-500">{d.clients} clients · {d.form}</div>
                   </div>
                   <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${dl <= 3 ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
@@ -317,19 +412,34 @@ export function DashboardPage() {
             {awaitingInfo.slice(0, 5).map(t => {
               const c = clients.find(x => x.id === t.clientId);
               const a = users.find(x => x.id === t.assigneeId);
+              const tt = taskTypes.find(type => type.name === t.type);
+              
               return (
-                <div key={t.id} className="flex items-center gap-2.5 px-4.5 py-2.5 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => openEditTask(t)}>
-                  <TypeChip type={t.type} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-gray-400">#{t.id}</span>
-                      <div className="font-medium text-[13px] truncate text-gray-900">{t.title}</div>
-                    </div>
-                    <div className="text-[11px] text-gray-500">{c?.name || '—'}</div>
+                <div key={t.id} className="flex items-center gap-2.5 px-4.5 py-2.5 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors group" onClick={() => openEditTask(t)}>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${tt?.color || '#3b82f6'}15`, color: tt?.color || '#3b82f6' }}>
+                    <FileText size={16} />
                   </div>
-                  <Avatar user={a} size={24} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-1 rounded border border-gray-100">#{t.id}</span>
+                      <div className="font-medium text-[13px] truncate text-gray-900 group-hover:text-blue-600 transition-colors">{t.title}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-[11px] text-gray-500 truncate max-w-[120px]">{c?.name || '—'}</div>
+                      {t.tags && t.tags.length > 0 && (
+                        <div className="flex items-center gap-1 overflow-hidden">
+                          {t.tags.slice(0, 2).map(tag => (
+                            <span key={tag} className="text-[9px] px-1.5 py-0.25 bg-gray-100 text-gray-500 rounded-full border border-gray-200 uppercase tracking-wider font-semibold">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <Avatar user={a} size={20} />
                   <button 
-                    className="ml-2 px-2 py-1 rounded-md border border-gray-200 text-[10px] font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
+                    className="ml-2 px-2 py-1 rounded-md border border-gray-200 text-[10px] font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors shrink-0"
                     onClick={(e) => { e.stopPropagation(); openEditTask(t); }}
                   >
                     Follow Up

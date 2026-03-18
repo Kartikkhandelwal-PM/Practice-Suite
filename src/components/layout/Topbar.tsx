@@ -9,7 +9,14 @@ import { AppNotification } from '../../types';
 import { Avatar } from '../ui/Avatar';
 
 export function Topbar() {
-  const { notifications, setNotifications, sidebarCollapsed, setSidebarCollapsed, mobileMenuOpen, setMobileMenuOpen, currentUser, setCurrentUser, users, setIsAuthenticated, tasks, clients, docs } = useApp();
+  const { 
+    notifications, setNotifications, 
+    sidebarCollapsed, setSidebarCollapsed, 
+    mobileMenuOpen, setMobileMenuOpen, 
+    currentUser, setCurrentUser, 
+    users, logout, 
+    tasks, clients, docs 
+  } = useApp();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -77,7 +84,7 @@ export function Topbar() {
       danger: true,
     });
     if (confirmed) {
-      setIsAuthenticated(false);
+      logout();
       navigate('/');
     }
   };
