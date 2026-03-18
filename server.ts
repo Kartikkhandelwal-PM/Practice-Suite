@@ -13,6 +13,21 @@ const __dirname = path.dirname(__filename);
 // Initialize Supabase Admin client
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+console.log('[Server] Initializing Supabase...');
+if (!supabaseUrl.startsWith('http')) {
+  console.error('[Server] CRITICAL: SUPABASE_URL is invalid! It should start with https://');
+} else {
+  console.log('[Server] Supabase URL:', supabaseUrl);
+}
+
+if (supabaseServiceKey) {
+  console.log('[Server] Service Role Key found (length):', supabaseServiceKey.length);
+  console.log('[Server] Service Role Key starts with:', supabaseServiceKey.substring(0, 10) + '...');
+} else {
+  console.error('[Server] CRITICAL: SUPABASE_SERVICE_ROLE_KEY is missing!');
+}
+
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 async function startServer() {
@@ -78,6 +93,13 @@ async function startServer() {
     const { table } = req.params;
     const { select = '*', eq_field, eq_value } = req.query;
     
+    console.log(`[Server] GET /api/data/${table} - Select: ${select}, Eq: ${eq_field}=${eq_value}`);
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('[Server] Supabase credentials missing!');
+      return res.status(500).json({ error: 'Supabase credentials missing on server' });
+    }
+
     try {
       let query = supabase.from(table).select(select as string);
       
@@ -86,9 +108,14 @@ async function startServer() {
       }
 
       const { data, error } = await query;
-      if (error) throw error;
+      if (error) {
+        console.error(`[Server] Supabase Fetch Error from ${table}:`, JSON.stringify(error, null, 2));
+        return res.status(error.code === '42501' ? 403 : 500).json({ error: error.message, details: error });
+      }
+      console.log(`[Server] Supabase Fetch Success from ${table}:`, data?.length || 0, 'items');
       res.json(data);
     } catch (error: any) {
+      console.error(`[Server] Unexpected Error fetching from ${table}:`, error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -97,11 +124,23 @@ async function startServer() {
     const { table } = req.params;
     const payload = req.body;
     
+    console.log(`[Server] POST /api/data/${table} - Payload:`, payload);
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('[Server] Supabase credentials missing!');
+      return res.status(500).json({ error: 'Supabase credentials missing on server' });
+    }
+
     try {
-      const { data, error } = await supabase.from(table).insert(payload).select().single();
-      if (error) throw error;
-      res.json(data);
+      const { data, error } = await supabase.from(table).insert(payload).select();
+      if (error) {
+        console.error(`[Server] Supabase Insert Error into ${table}:`, JSON.stringify(error, null, 2));
+        return res.status(error.code === '42501' ? 403 : 500).json({ error: error.message, details: error });
+      }
+      console.log(`[Server] Supabase Insert Success into ${table}:`, data?.length || 0, 'items');
+      res.json(Array.isArray(payload) ? data : data?.[0]);
     } catch (error: any) {
+      console.error(`[Server] Unexpected Error inserting into ${table}:`, error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -111,10 +150,14 @@ async function startServer() {
     const { id, ...payload } = req.body;
     
     try {
-      const { data, error } = await supabase.from(table).update(payload).eq('id', id).select().single();
-      if (error) throw error;
-      res.json(data);
+      const { data, error } = await supabase.from(table).update(payload).eq('id', id).select();
+      if (error) {
+        console.error(`[Server] Supabase Update Error on ${table}:`, JSON.stringify(error, null, 2));
+        return res.status(error.code === '42501' ? 403 : 500).json({ error: error.message, details: error });
+      }
+      res.json(data?.[0]);
     } catch (error: any) {
+      console.error(`[Server] Unexpected Error updating ${table}:`, error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -125,9 +168,13 @@ async function startServer() {
     
     try {
       const { error } = await supabase.from(table).delete().eq('id', id as string);
-      if (error) throw error;
+      if (error) {
+        console.error(`[Server] Supabase Delete Error on ${table}:`, JSON.stringify(error, null, 2));
+        return res.status(error.code === '42501' ? 403 : 500).json({ error: error.message, details: error });
+      }
       res.json({ success: true });
     } catch (error: any) {
+      console.error(`[Server] Unexpected Error deleting from ${table}:`, error);
       res.status(500).json({ error: error.message });
     }
   });

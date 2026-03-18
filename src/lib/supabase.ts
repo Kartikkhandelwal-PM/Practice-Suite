@@ -103,16 +103,24 @@ export const supabase: any = {
         return query;
       },
       insert: async (payload: any) => {
-        const res = await fetch(`/api/data/${table}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const data = await res.json();
-        return { 
-          data: res.ok ? data : null, 
-          error: res.ok ? null : new Error(data.error || 'Insert failed') 
-        };
+        console.log(`[Supabase Proxy] Inserting into ${table}:`, payload);
+        try {
+          const res = await fetch(`/api/data/${table}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            console.error(`[Supabase Proxy] Insert into ${table} failed:`, data.error);
+            return { data: null, error: new Error(data.error || 'Insert failed') };
+          }
+          console.log(`[Supabase Proxy] Insert into ${table} successful:`, data);
+          return { data, error: null };
+        } catch (err: any) {
+          console.error(`[Supabase Proxy] Insert into ${table} exception:`, err);
+          return { data: null, error: err };
+        }
       },
       update: (payload: any) => {
         const query: any = {

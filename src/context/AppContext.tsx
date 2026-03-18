@@ -157,7 +157,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     localStorage.setItem('sb-session', JSON.stringify(session));
     const user = session.user;
-    const isSampleUser = user.email === 'kartikkhandelwal1104@gmail.com';
+    const isSampleUser = user.email === 'kartikkhandelwal1104@gmail.com' || user.email === 'svap.kartik@gmail.com';
     
     // Set basic user info
     const userObj: User = {
@@ -173,6 +173,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     
     // Fetch data from backend
     try {
+      console.log('Loading data for user:', user.email);
+      
+      // Check if user profile exists, if not create it
+      const { data: profile } = await supabase.from('user_profiles').select('*').eq('id', user.id).maybeSingle();
+      if (!profile) {
+        console.log('Creating new user profile...');
+        await supabase.from('user_profiles').insert({
+          id: user.id,
+          full_name: user.user_metadata?.full_name || 'User',
+          email: user.email,
+          active: true
+        });
+      } else {
+        userObj.name = profile.full_name || userObj.name;
+        userObj.designation = profile.designation || userObj.designation;
+        userObj.role = profile.role_id ? 'Admin' : userObj.role; // Simplified for now
+      }
+
       const [
         { data: tasksData },
         { data: clientsData },
@@ -207,6 +225,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       
       // Map and set tasks
       if (Array.isArray(tasksData) && tasksData.length > 0) {
+        console.log('Loaded tasks:', tasksData.length);
         setTasks(tasksData.map(t => ({
           ...t,
           clientId: t.client_id,
@@ -222,6 +241,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           dependencies: t.dependencies
         })));
       } else if (isSampleUser) {
+        console.log('Seeding sample tasks...');
         setTasks(INIT_TASKS);
         // Seed DB for sample user if empty
         const tasksToInsert = INIT_TASKS.map(t => {
@@ -250,11 +270,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // Map and set clients
       if (Array.isArray(clientsData) && clientsData.length > 0) {
+        console.log('Loaded clients:', clientsData.length);
         setClients(clientsData.map(c => ({
           ...c,
           onboarded: c.onboarded_at
         })));
       } else if (isSampleUser) {
+        console.log('Seeding sample clients...');
         setClients(INIT_CLIENTS);
         const clientsToInsert = INIT_CLIENTS.map(c => {
           const dbClient: any = { ...c, profile_id: user.id, onboarded_at: c.onboarded };
@@ -269,8 +291,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Set other data
       const setAndSeed = async (table: string, data: any[], setter: any, initData: any[], mapper?: any) => {
         if (Array.isArray(data) && data.length > 0) {
+          console.log(`Loaded ${table}:`, data.length);
           setter(mapper ? data.map(mapper) : data);
         } else if (isSampleUser) {
+          console.log(`Seeding sample ${table}...`);
           setter(initData);
           // Seed DB
           const toInsert = initData.map(item => {
@@ -572,7 +596,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const dbNote: any = { ...noteWithProfile, created_at: note.createdAt, updated_at: note.updatedAt };
     delete dbNote.createdAt;
     delete dbNote.updatedAt;
-    await supabase.from('notes').insert(dbNote);
+    
+    console.log('Attempting to save note to DB:', dbNote);
+    const { error } = await supabase.from('notes').insert(dbNote);
+    if (error) {
+      console.error('Failed to save note to database:', error);
+    } else {
+      console.log('Note saved to database successfully');
+    }
   };
 
   const deleteNote = async (id: string) => {

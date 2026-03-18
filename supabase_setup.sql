@@ -298,9 +298,32 @@ DO $$
 DECLARE
     t text;
 BEGIN
+    -- Grant usage on schema
+    EXECUTE 'GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;';
+    EXECUTE 'GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;';
+    EXECUTE 'GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;';
+    EXECUTE 'GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO service_role;';
+    
+    -- Grant sequence permissions to authenticated role for inserts
+    EXECUTE 'GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;';
+    
+    -- Ensure future tables also get these permissions
+    EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;';
+    EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;';
+    EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO service_role;';
+
     FOR t IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
         EXECUTE format('DROP POLICY IF EXISTS "Allow all for authenticated" ON %I;', t);
+        EXECUTE format('DROP POLICY IF EXISTS "Allow owner access" ON %I;', t);
+        EXECUTE format('DROP POLICY IF EXISTS "Allow read for authenticated" ON %I;', t);
+        EXECUTE format('DROP POLICY IF EXISTS "Service role bypass" ON %I;', t);
+        
+        -- Grant basic permissions to authenticated role
+        EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO authenticated;', t);
+        EXECUTE format('GRANT SELECT ON %I TO anon;', t);
+        EXECUTE format('GRANT ALL ON %I TO service_role;', t);
+
         -- Simple policy: users can only see/edit their own data (where profile_id matches)
         -- For roles and permissions, they are readable by all authenticated users
         IF t IN ('roles', 'permissions') THEN
@@ -312,7 +335,7 @@ BEGIN
             ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = t AND column_name = 'id' AND t = 'user_profiles') THEN
                 EXECUTE format('CREATE POLICY "Allow owner access" ON %I FOR ALL TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);', t);
             ELSE
-                -- Fallback for tables without profile_id (like role_permissions if it existed)
+                -- Fallback for tables without profile_id
                 EXECUTE format('CREATE POLICY "Allow all for authenticated" ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true);', t);
             END IF;
         END IF;
