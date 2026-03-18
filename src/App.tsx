@@ -7,6 +7,7 @@ import { Layout } from './components/layout/Layout';
 
 import { SplashPage } from './pages/SplashPage';
 import { AuthPage } from './pages/AuthPage';
+import { LandingPage } from './pages/LandingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { KanbanPage } from './pages/KanbanPage';
 import { TasksPage } from './pages/TasksPage';
@@ -37,7 +38,13 @@ function AppContent() {
   }
 
   if (!isAuthenticated) {
-    return <AuthPage />;
+    return (
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    );
   }
 
   return (

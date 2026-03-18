@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Task, Client, User, Deadline, Template, Meeting, Note, Password, Document, Folder, Email, TaskTypeConfig, Workflow, AppNotification, Permission, Role } from '../types';
-import { INIT_TASKS, INIT_CLIENTS, INIT_USERS, INIT_DEADLINES, INIT_TEMPLATES, INIT_MEETINGS, INIT_NOTES, INIT_PASSWORDS, INIT_DOCS, INIT_FOLDERS, INIT_EMAILS, INIT_TASK_TYPES, INIT_WORKFLOWS, INIT_PERMISSIONS, INIT_ROLES } from '../data';
+import { INIT_TASKS, INIT_CLIENTS, INIT_DEADLINES, INIT_TEMPLATES, INIT_MEETINGS, INIT_NOTES, INIT_PASSWORDS, INIT_DOCS, INIT_FOLDERS, INIT_EMAILS, INIT_TASK_TYPES, INIT_WORKFLOWS, INIT_PERMISSIONS, INIT_ROLES } from '../data';
 import { supabase } from '../lib/supabase';
 import { genUUID } from '../utils';
 
@@ -148,52 +148,78 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCurrentUser(null);
   };
 
-  const seedSampleData = async () => {
-    if (!currentUser) return;
+  const seedSampleData = async (user?: User) => {
+    const activeUser = user || currentUser;
+    if (!activeUser) return;
     setIsLoading(true);
     try {
-      // Seed Users (Profiles)
-      const usersToInsert = INIT_USERS.map(u => {
-        const dbUser: any = { ...u, full_name: u.name, avatar_url: u.avatarUrl || null };
-        delete dbUser.avatarUrl;
-        delete dbUser.name;
-        delete dbUser.role;
-        return dbUser;
-      });
-      // Add current user profile if not already in INIT_USERS
-      if (!usersToInsert.find(u => u.id === currentUser.id)) {
-        usersToInsert.push({
-          id: currentUser.id,
-          full_name: currentUser.name || 'User',
-          email: currentUser.email,
-          active: true
+      // Check existing workflows
+      const { data: existingWorkflows } = await supabase.from('workflows').select('id').eq('profile_id', activeUser.id);
+      const workflowIdMap: Record<string, string> = {};
+      
+      if (!existingWorkflows || existingWorkflows.length === 0) {
+        // Seed Workflows
+        const workflowsToInsert = INIT_WORKFLOWS.map(w => {
+          const newId = genUUID();
+          workflowIdMap[w.id] = newId;
+          return { ...w, id: newId, profile_id: activeUser.id };
         });
+        await supabase.from('workflows').insert(workflowsToInsert);
+
+        // Seed Task Types
+        const taskTypesToInsert = INIT_TASK_TYPES.map(tt => {
+          const newId = genUUID();
+          const dbTt: any = { 
+            ...tt, 
+            id: newId,
+            profile_id: activeUser.id,
+            workflow_id: workflowIdMap[tt.workflowId] || tt.workflowId
+          };
+          delete dbTt.workflowId;
+          return dbTt;
+        });
+        await supabase.from('task_types').insert(taskTypesToInsert);
+      } else {
+        // Map existing workflows to INIT_WORKFLOWS by name or just use the first one
+        const { data: fullWorkflows } = await supabase.from('workflows').select('*').eq('profile_id', activeUser.id);
+        if (fullWorkflows && fullWorkflows.length > 0) {
+          INIT_WORKFLOWS.forEach(w => {
+            const match = fullWorkflows.find(fw => fw.name === w.name);
+            if (match) {
+              workflowIdMap[w.id] = match.id;
+            } else {
+              workflowIdMap[w.id] = fullWorkflows[0].id;
+            }
+          });
+        }
       }
-      await supabase.from('user_profiles').upsert(usersToInsert);
 
-      // Seed Workflows
-      const workflowsToInsert = INIT_WORKFLOWS.map(w => ({ ...w, profile_id: currentUser.id }));
-      await supabase.from('workflows').insert(workflowsToInsert);
-
-      // Seed Task Types
-      const taskTypesToInsert = INIT_TASK_TYPES.map(tt => ({ 
-        ...tt, 
-        profile_id: currentUser.id,
-        workflow_id: tt.workflowId
-      }));
-      // Remove workflowId from the object before insert
-      taskTypesToInsert.forEach((tt: any) => delete tt.workflowId);
-      await supabase.from('task_types').insert(taskTypesToInsert);
+      // Seed Clients
+      const clientIdMap: Record<string, string> = {};
+      const clientsToInsert = INIT_CLIENTS.map(c => {
+        const newId = genUUID();
+        clientIdMap[c.id] = newId;
+        const dbClient: any = { 
+          ...c, 
+          id: newId, 
+          profile_id: activeUser.id, 
+          manager: activeUser.id,
+          onboarded_at: c.onboarded 
+        };
+        delete dbClient.onboarded;
+        return dbClient;
+      });
+      await supabase.from('clients').insert(clientsToInsert);
 
       // Seed Tasks
       const tasksToInsert = INIT_TASKS.map(t => {
         const dbTask: any = { 
           ...t, 
-          profile_id: currentUser.id,
-          client_id: t.clientId, 
-          assigned_to: t.assigneeId || currentUser.id, 
-          reviewer_id: t.reviewerId || currentUser.id, 
-          reporter_id: t.reporterId || currentUser.id,
+          profile_id: activeUser.id,
+          client_id: t.clientId ? (clientIdMap[t.clientId] || t.clientId) : null, 
+          assigned_to: activeUser.id, 
+          reviewer_id: activeUser.id, 
+          reporter_id: activeUser.id,
           due_date: t.dueDate, 
           issue_type: t.issueType, 
           parent_id: t.parentId, 
@@ -207,22 +233,128 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       await supabase.from('tasks').insert(tasksToInsert);
 
-      // Seed Clients
-      const clientsToInsert = INIT_CLIENTS.map(c => {
-        const dbClient: any = { ...c, profile_id: currentUser.id, onboarded_at: c.onboarded };
-        delete dbClient.onboarded;
-        return dbClient;
-      });
-      await supabase.from('clients').insert(clientsToInsert);
-
       // Seed Deadlines
-      const deadlinesToInsert = INIT_DEADLINES.map(d => ({
-        ...d,
-        profile_id: currentUser.id,
-        due_date: d.dueDate,
-        description: d.desc
-      }));
+      const deadlinesToInsert = INIT_DEADLINES.map(d => {
+        const dbDeadline: any = {
+          ...d,
+          id: genUUID(),
+          profile_id: activeUser.id,
+          due_date: d.dueDate,
+          description: d.desc
+        };
+        delete dbDeadline.dueDate; delete dbDeadline.desc;
+        return dbDeadline;
+      });
       await supabase.from('deadlines').insert(deadlinesToInsert);
+
+      // Seed Notes
+      const notesToInsert = INIT_NOTES.map(n => {
+        const dbNote: any = {
+          ...n,
+          id: genUUID(),
+          profile_id: activeUser.id,
+          created_at: n.createdAt,
+          updated_at: n.updatedAt
+        };
+        delete dbNote.createdAt;
+        delete dbNote.updatedAt;
+        return dbNote;
+      });
+      await supabase.from('notes').insert(notesToInsert);
+
+      // Seed Passwords
+      const passwordsToInsert = INIT_PASSWORDS.map(p => {
+        const dbPassword: any = {
+          ...p,
+          id: genUUID(),
+          profile_id: activeUser.id,
+          client_id: p.clientId ? (clientIdMap[p.clientId] || p.clientId) : null,
+          updated_at: p.lastUpdated
+        };
+        delete dbPassword.clientId;
+        delete dbPassword.lastUpdated;
+        return dbPassword;
+      });
+      await supabase.from('passwords').insert(passwordsToInsert);
+
+      // Seed Templates
+      const templatesToInsert = INIT_TEMPLATES.map(t => {
+        const dbTemplate: any = {
+          ...t,
+          id: genUUID(),
+          profile_id: activeUser.id,
+          est_hours: t.estHours
+        };
+        delete dbTemplate.estHours;
+        return dbTemplate;
+      });
+      await supabase.from('templates').insert(templatesToInsert);
+
+      // Seed Meetings
+      const meetingsToInsert = INIT_MEETINGS.map(m => {
+        const dbMeeting: any = {
+          ...m,
+          id: genUUID(),
+          profile_id: activeUser.id,
+          client_id: m.clientId ? (clientIdMap[m.clientId] || m.clientId) : null,
+          meet_link: m.meetLink,
+          attendees: [activeUser.id]
+        };
+        delete dbMeeting.clientId;
+        delete dbMeeting.meetLink;
+        return dbMeeting;
+      });
+      await supabase.from('meetings').insert(meetingsToInsert);
+
+      // Seed Folders
+      const folderIdMap: Record<string, string> = {};
+      const foldersToInsert = INIT_FOLDERS.map(f => {
+        const newId = genUUID();
+        folderIdMap[f.id] = newId;
+        const dbFolder: any = {
+          ...f,
+          id: newId,
+          profile_id: activeUser.id,
+          parent_id: f.parentId ? (folderIdMap[f.parentId] || f.parentId) : null,
+          client_id: f.clientId ? (clientIdMap[f.clientId] || f.clientId) : null
+        };
+        delete dbFolder.parentId; delete dbFolder.clientId;
+        return dbFolder;
+      });
+      await supabase.from('folders').insert(foldersToInsert);
+
+      // Seed Documents
+      const docsToInsert = INIT_DOCS.map(d => {
+        const dbDoc: any = {
+          ...d,
+          id: genUUID(),
+          profile_id: activeUser.id,
+          folder_id: d.folderId ? (folderIdMap[d.folderId] || d.folderId) : null,
+          client_id: d.clientId ? (clientIdMap[d.clientId] || d.clientId) : null,
+          uploaded_by: activeUser.id,
+          created_at: d.uploadedAt
+        };
+        delete dbDoc.folderId; delete dbDoc.clientId; delete dbDoc.uploadedBy; delete dbDoc.uploadedAt;
+        return dbDoc;
+      });
+      await supabase.from('documents').insert(docsToInsert);
+
+      // Seed Emails
+      const emailsToInsert = INIT_EMAILS.map(e => {
+        const dbEmail: any = {
+          ...e,
+          id: genUUID(),
+          profile_id: activeUser.id,
+          from_name: e.from,
+          from_email: e.fromEmail,
+          to_email: activeUser.email,
+          client_id: e.clientId ? (clientIdMap[e.clientId] || e.clientId) : null,
+          task_linked: e.taskLinked
+        };
+        delete dbEmail.fromEmail; delete dbEmail.from; delete dbEmail.to; delete dbEmail.clientId; delete dbEmail.taskLinked;
+        return dbEmail;
+      });
+      await supabase.from('emails').insert(emailsToInsert);
 
       // Reload data
       const sessionStr = localStorage.getItem('sb-session');
@@ -293,7 +425,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         { data: taskTypesData },
         { data: workflowsData },
         { data: rolesData },
-        { data: permissionsData }
+        { data: permissionsData },
+        { data: userProfilesData }
       ] = await Promise.all([
         supabase.from('tasks').select('*'),
         supabase.from('clients').select('*'),
@@ -308,7 +441,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         supabase.from('task_types').select('*'),
         supabase.from('workflows').select('*'),
         supabase.from('roles').select('*'),
-        supabase.from('permissions').select('*')
+        supabase.from('permissions').select('*'),
+        supabase.from('user_profiles').select('*')
       ]);
       
       // Map and set tasks
@@ -343,6 +477,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setClients([]);
       }
 
+      // Map and set users
+      if (Array.isArray(userProfilesData) && userProfilesData.length > 0) {
+        console.log('Loaded users:', userProfilesData.length);
+        setUsers(userProfilesData.map(u => ({
+          id: u.id,
+          name: u.full_name || 'Unknown',
+          email: u.email || '',
+          role: u.role_id ? 'Admin' : 'Team Member', // Simplified
+          designation: u.designation || 'Staff',
+          color: u.color || '#2563eb',
+          active: u.active !== false,
+          avatarUrl: u.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.full_name || 'User')}&background=0D8ABC&color=fff`
+        })));
+      } else {
+        // If no users found, at least add the current user
+        setUsers([userObj]);
+      }
+
       // Set other data
       const setAndSeed = async (table: string, data: any[], setter: any, mapper?: any) => {
         if (Array.isArray(data) && data.length > 0) {
@@ -362,11 +514,65 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setAndSeed('documents', docsData || [], setDocs, (d: any) => ({ ...d, folderId: d.folder_id, clientId: d.client_id, uploadedBy: d.uploaded_by, uploadedAt: d.created_at })),
         setAndSeed('folders', foldersData || [], setFolders, (f: any) => ({ ...f, parentId: f.parent_id, clientId: f.client_id })),
         setAndSeed('emails', emailsData || [], setEmails, (e: any) => ({ ...e, fromEmail: e.from_email, to: e.to_email, clientId: e.client_id, taskLinked: e.task_linked })),
-        setAndSeed('task_types', taskTypesData || [], setTaskTypes, (tt: any) => ({ ...tt, workflowId: tt.workflow_id })),
-        setWorkflows(Array.isArray(workflowsData) && workflowsData.length > 0 ? workflowsData : []),
         setRoles(Array.isArray(rolesData) && rolesData.length > 0 ? rolesData : INIT_ROLES),
         setPermissions(Array.isArray(permissionsData) && permissionsData.length > 0 ? permissionsData : INIT_PERMISSIONS)
       ]);
+
+      // Handle workflows and task types - seed defaults if empty
+      let finalWorkflows = Array.isArray(workflowsData) ? workflowsData : [];
+      let finalTaskTypes = Array.isArray(taskTypesData) ? taskTypesData.map((tt: any) => ({ ...tt, workflowId: tt.workflow_id })) : [];
+
+      if (finalWorkflows.length === 0) {
+        console.log('Seeding default workflows...');
+        const workflowIdMap: Record<string, string> = {};
+        const workflowsToInsert = INIT_WORKFLOWS.map(w => {
+          const newId = genUUID();
+          workflowIdMap[w.id] = newId;
+          return { ...w, id: newId, profile_id: user.id };
+        });
+        const { data: newWorkflows } = await supabase.from('workflows').insert(workflowsToInsert).select();
+        if (newWorkflows) finalWorkflows = newWorkflows;
+
+        if (finalTaskTypes.length === 0) {
+          console.log('Seeding default task types...');
+          const taskTypesToInsert = INIT_TASK_TYPES.map(tt => {
+            const newId = genUUID();
+            const dbTt: any = { 
+              ...tt, 
+              id: newId,
+              profile_id: user.id, 
+              workflow_id: workflowIdMap[tt.workflowId] || tt.workflowId 
+            };
+            delete dbTt.workflowId;
+            return dbTt;
+          });
+          const { data: newTaskTypes } = await supabase.from('task_types').insert(taskTypesToInsert).select();
+          if (newTaskTypes) {
+            finalTaskTypes = newTaskTypes.map((tt: any) => ({ ...tt, workflowId: tt.workflow_id }));
+          }
+        }
+      } else if (finalTaskTypes.length === 0) {
+        // Fallback if workflows exist but task types don't (rare but possible)
+        console.log('Seeding default task types with existing workflows...');
+        const defaultWorkflowId = finalWorkflows[0]?.id;
+        const taskTypesToInsert = INIT_TASK_TYPES.map(tt => {
+          const newId = genUUID();
+          const dbTt: any = { 
+            ...tt, 
+            id: newId,
+            profile_id: user.id, 
+            workflow_id: defaultWorkflowId 
+          };
+          delete dbTt.workflowId;
+          return dbTt;
+        });
+        const { data: newTaskTypes } = await supabase.from('task_types').insert(taskTypesToInsert).select();
+        if (newTaskTypes) {
+          finalTaskTypes = newTaskTypes.map((tt: any) => ({ ...tt, workflowId: tt.workflow_id }));
+        }
+      }
+      setWorkflows(finalWorkflows);
+      setTaskTypes(finalTaskTypes);
 
       // Fallback to local storage for remaining non-table data
       const storageKey = `app-data-${user.id}`;
@@ -379,6 +585,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       setIsAuthenticated(true);
       setCurrentUser(userObj);
+      
+      // Auto-seed sample data for new users
+      if ((!tasksData || tasksData.length === 0) && (!clientsData || clientsData.length === 0)) {
+        console.log('New user detected, auto-seeding sample data...');
+        // We need to wait a tick for state to settle, then call seedSampleData
+        setTimeout(() => {
+          seedSampleData(userObj);
+        }, 500);
+      }
+      
       setIsLoading(false);
     } catch (error) {
       console.error('Login error:', error);
@@ -517,6 +733,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addTasks = async (newTasks: Task[]): Promise<string[]> => {
     let finalIds: string[] = [];
     let tasksToInsert: any[] = [];
+    let tasksToAdd: Task[] = [];
     
     setTasks(prev => {
       let max = 0;
@@ -529,7 +746,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       
       const idMap: Record<string, string> = {};
       
-      const tasksToAdd = newTasks.map((task, idx) => {
+      tasksToAdd = newTasks.map((task, idx) => {
         const taskType = task.type || (taskTypes.length > 0 ? taskTypes[0].name : 'GST');
         let finalTask = { ...task, profile_id: currentUser?.id, type: taskType };
         if (!task.id.startsWith('KDK-') || task.id.length > 20) {
@@ -537,11 +754,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           idMap[task.id] = newId;
           finalTask.id = newId;
         }
-        finalIds.push(finalTask.id);
         return finalTask;
       });
       
+      // Reset arrays to avoid duplicates in Strict Mode
+      finalIds = [];
+      tasksToInsert = [];
+      
       tasksToAdd.forEach(t => {
+        finalIds.push(t.id);
         if (t.parentId && idMap[t.parentId]) {
           t.parentId = idMap[t.parentId];
         }
@@ -618,9 +839,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setNotes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
     const now = new Date().toISOString();
     const dbUpdates: any = { ...updates, updated_at: now };
-    if (updates.createdAt) { dbUpdates.created_at = updates.createdAt; delete dbUpdates.createdAt; }
-    if (updates.updatedAt) { delete dbUpdates.updatedAt; } // Always use DB timestamp
-    await supabase.from('notes').update(dbUpdates).eq('id', id);
+    delete dbUpdates.createdAt; // Don't update created_at
+    delete dbUpdates.updatedAt; // Always use DB timestamp
+    delete dbUpdates.id; // Don't update id
+    
+    console.log('Attempting to update note in DB:', id, dbUpdates);
+    const { error } = await supabase.from('notes').update(dbUpdates).eq('id', id);
+    if (error) {
+      console.error('Failed to update note in database:', error, dbUpdates);
+    } else {
+      console.log('Note updated in database successfully');
+    }
   };
 
   const addNote = async (note: Note) => {
@@ -629,7 +858,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const now = new Date().toISOString();
     const dbNote: any = { 
       ...noteWithProfile, 
-      created_at: note.createdAt || now, 
+      created_at: now, // Always use current timestamp for DB
       updated_at: now 
     };
     delete dbNote.createdAt;

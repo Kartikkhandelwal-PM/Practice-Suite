@@ -325,23 +325,8 @@ BEGIN
     EXECUTE format('GRANT SELECT ON %I TO anon;', t);
     EXECUTE format('GRANT ALL ON %I TO service_role;', t);
 
-    -- Simple policy: users can only see/edit their own data (where profile_id matches)
-    -- For roles and permissions, they are readable by all authenticated users
-    IF t IN ('roles', 'permissions', 'task_types', 'workflows') THEN
-        EXECUTE format('CREATE POLICY "Allow read for authenticated" ON %I FOR SELECT TO authenticated USING (true);', t);
-        IF t IN ('task_types', 'workflows') THEN
-            EXECUTE format('CREATE POLICY "Allow owner access" ON %I FOR ALL TO authenticated USING (auth.uid() = profile_id) WITH CHECK (auth.uid() = profile_id);', t);
-        END IF;
-    ELSE
-        -- Check if table has profile_id column
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = t AND column_name = 'profile_id') THEN
-            EXECUTE format('CREATE POLICY "Allow owner access" ON %I FOR ALL TO authenticated USING (auth.uid() = profile_id) WITH CHECK (auth.uid() = profile_id);', t);
-        ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = t AND column_name = 'id' AND t = 'user_profiles') THEN
-            EXECUTE format('CREATE POLICY "Allow owner access" ON %I FOR ALL TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);', t);
-        ELSE
-            -- Fallback for tables without profile_id
-            EXECUTE format('CREATE POLICY "Allow all for authenticated" ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true);', t);
-        END IF;
+    -- Simple policy: users can see/edit all data (single firm prototype)
+    EXECUTE format('CREATE POLICY "Allow all for authenticated" ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true);', t);
     END LOOP;
 END $$;
 
