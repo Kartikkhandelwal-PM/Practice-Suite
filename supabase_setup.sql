@@ -4,50 +4,52 @@
 -- ==========================================
 -- OPTIONAL: CLEAN SLATE (Uncomment to reset)
 -- ==========================================
--- DROP TABLE IF EXISTS notifications CASCADE;
--- DROP TABLE IF EXISTS meetings CASCADE;
--- DROP TABLE IF EXISTS documents CASCADE;
--- DROP TABLE IF EXISTS folders CASCADE;
--- DROP TABLE IF EXISTS passwords CASCADE;
--- DROP TABLE IF EXISTS notes CASCADE;
--- DROP TABLE IF EXISTS emails CASCADE;
--- DROP TABLE IF EXISTS deadlines CASCADE;
--- DROP TABLE IF EXISTS tasks CASCADE;
--- DROP TABLE IF EXISTS task_types CASCADE;
--- DROP TABLE IF EXISTS workflows CASCADE;
--- DROP TABLE IF EXISTS clients CASCADE;
--- DROP TABLE IF EXISTS user_profiles CASCADE;
--- DROP TABLE IF EXISTS role_permissions CASCADE;
--- DROP TABLE IF EXISTS permissions CASCADE;
--- DROP TABLE IF EXISTS roles CASCADE;
+DROP TABLE IF EXISTS notifications CASCADE;
+DROP TABLE IF EXISTS meetings CASCADE;
+DROP TABLE IF EXISTS documents CASCADE;
+DROP TABLE IF EXISTS folders CASCADE;
+DROP TABLE IF EXISTS passwords CASCADE;
+DROP TABLE IF EXISTS notes CASCADE;
+DROP TABLE IF EXISTS emails CASCADE;
+DROP TABLE IF EXISTS templates CASCADE;
+DROP TABLE IF EXISTS deadlines CASCADE;
+DROP TABLE IF EXISTS tasks CASCADE;
+DROP TABLE IF EXISTS task_types CASCADE;
+DROP TABLE IF EXISTS workflows CASCADE;
+DROP TABLE IF EXISTS clients CASCADE;
+DROP TABLE IF EXISTS user_profiles CASCADE;
+DROP TABLE IF EXISTS profiles CASCADE;
+DROP TABLE IF EXISTS role_permissions CASCADE;
+DROP TABLE IF EXISTS permissions CASCADE;
+DROP TABLE IF EXISTS roles CASCADE;
+
+-- Enable Extensions
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- 1. Core Tables
 
 -- Roles Table
-CREATE TABLE IF NOT EXISTS roles (
+CREATE TABLE roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID, -- Optional: for custom roles per organization
   name TEXT UNIQUE NOT NULL,
   description TEXT,
+  permissions TEXT[], -- Array of permission IDs
+  is_system BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Permissions Table
-CREATE TABLE IF NOT EXISTS permissions (
+CREATE TABLE permissions (
   id TEXT PRIMARY KEY, -- e.g., 'view_dashboard'
   name TEXT NOT NULL,
   description TEXT,
+  module TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Role Permissions Join Table
-CREATE TABLE IF NOT EXISTS role_permissions (
-  role_id UUID REFERENCES roles(id) ON DELETE CASCADE,
-  permission_id TEXT REFERENCES permissions(id) ON DELETE CASCADE,
-  PRIMARY KEY (role_id, permission_id)
-);
-
 -- User Profiles (Extends auth.users)
-CREATE TABLE IF NOT EXISTS user_profiles (
+CREATE TABLE user_profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name TEXT,
   role_id UUID REFERENCES roles(id),
@@ -60,8 +62,9 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 );
 
 -- Clients Table
-CREATE TABLE IF NOT EXISTS clients (
+CREATE TABLE clients (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID REFERENCES auth.users(id),
   name TEXT NOT NULL,
   email TEXT,
   phone TEXT,
@@ -71,14 +74,18 @@ CREATE TABLE IF NOT EXISTS clients (
   gstin TEXT,
   category TEXT,
   address TEXT,
+  services TEXT[],
+  manager TEXT,
+  active BOOLEAN DEFAULT true,
   onboarded_at TIMESTAMPTZ DEFAULT now(),
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Workflows Table
-CREATE TABLE IF NOT EXISTS workflows (
+CREATE TABLE workflows (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID REFERENCES auth.users(id),
   name TEXT NOT NULL,
   description TEXT,
   statuses TEXT[] NOT NULL,
@@ -87,8 +94,9 @@ CREATE TABLE IF NOT EXISTS workflows (
 );
 
 -- Task Types Table
-CREATE TABLE IF NOT EXISTS task_types (
+CREATE TABLE task_types (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID REFERENCES auth.users(id),
   name TEXT NOT NULL,
   icon TEXT NOT NULL,
   color TEXT NOT NULL,
@@ -98,8 +106,9 @@ CREATE TABLE IF NOT EXISTS task_types (
 );
 
 -- Tasks Table
-CREATE TABLE IF NOT EXISTS tasks (
+CREATE TABLE tasks (
   id TEXT PRIMARY KEY, -- Support KDK-1 style IDs
+  profile_id UUID REFERENCES auth.users(id),
   title TEXT NOT NULL,
   description TEXT,
   status TEXT DEFAULT 'Pending',
@@ -107,31 +116,42 @@ CREATE TABLE IF NOT EXISTS tasks (
   due_date TIMESTAMPTZ,
   client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
   assigned_to UUID REFERENCES auth.users(id),
+  reviewer_id UUID REFERENCES auth.users(id),
+  reporter_id UUID REFERENCES auth.users(id),
   type TEXT,
   issue_type TEXT,
   tags TEXT[],
   subtasks JSONB DEFAULT '[]'::jsonb,
   comments JSONB DEFAULT '[]'::jsonb,
   attachments JSONB DEFAULT '[]'::jsonb,
+  activity JSONB DEFAULT '[]'::jsonb,
+  recurring TEXT,
+  parent_id TEXT,
+  linked_tasks TEXT[],
+  dependencies TEXT[],
+  statutory_deadline TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Deadlines Table
-CREATE TABLE IF NOT EXISTS deadlines (
+CREATE TABLE deadlines (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID REFERENCES auth.users(id),
   title TEXT NOT NULL,
   description TEXT,
   category TEXT,
   due_date DATE NOT NULL,
+  clients INTEGER DEFAULT 0,
   form TEXT,
   section TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Templates Table
-CREATE TABLE IF NOT EXISTS templates (
+CREATE TABLE templates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID REFERENCES auth.users(id),
   name TEXT NOT NULL,
   category TEXT,
   recurring TEXT,
@@ -143,8 +163,9 @@ CREATE TABLE IF NOT EXISTS templates (
 );
 
 -- Emails Table
-CREATE TABLE IF NOT EXISTS emails (
+CREATE TABLE emails (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID REFERENCES auth.users(id),
   from_name TEXT,
   from_email TEXT,
   to_email TEXT,
@@ -158,14 +179,18 @@ CREATE TABLE IF NOT EXISTS emails (
   time TEXT,
   read BOOLEAN DEFAULT false,
   starred BOOLEAN DEFAULT false,
+  snoozed BOOLEAN DEFAULT false,
+  labels TEXT[],
+  attachments TEXT[],
   folder TEXT DEFAULT 'inbox',
+  task_linked TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Notes Table
-CREATE TABLE IF NOT EXISTS notes (
+CREATE TABLE notes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  profile_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   title TEXT,
   content TEXT,
   color TEXT,
@@ -175,8 +200,9 @@ CREATE TABLE IF NOT EXISTS notes (
 );
 
 -- Passwords Table
-CREATE TABLE IF NOT EXISTS passwords (
+CREATE TABLE passwords (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID REFERENCES auth.users(id),
   client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
   portal TEXT NOT NULL,
   url TEXT,
@@ -185,12 +211,14 @@ CREATE TABLE IF NOT EXISTS passwords (
   notes TEXT,
   category TEXT,
   strength INTEGER,
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Folders Table
-CREATE TABLE IF NOT EXISTS folders (
+CREATE TABLE folders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID REFERENCES auth.users(id),
   name TEXT NOT NULL,
   parent_id UUID REFERENCES folders(id),
   client_id UUID REFERENCES clients(id),
@@ -199,8 +227,9 @@ CREATE TABLE IF NOT EXISTS folders (
 );
 
 -- Documents Table
-CREATE TABLE IF NOT EXISTS documents (
+CREATE TABLE documents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID REFERENCES auth.users(id),
   folder_id UUID REFERENCES folders(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   type TEXT,
@@ -214,8 +243,9 @@ CREATE TABLE IF NOT EXISTS documents (
 );
 
 -- Meetings Table
-CREATE TABLE IF NOT EXISTS meetings (
+CREATE TABLE meetings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID REFERENCES auth.users(id),
   title TEXT NOT NULL,
   client_id UUID REFERENCES clients(id),
   type TEXT,
@@ -226,14 +256,15 @@ CREATE TABLE IF NOT EXISTS meetings (
   duration INTEGER,
   attendees UUID[], -- Array of auth.users IDs
   description TEXT,
+  notes TEXT,
   status TEXT DEFAULT 'scheduled',
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Notifications Table
-CREATE TABLE IF NOT EXISTS notifications (
+CREATE TABLE notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  profile_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   text TEXT NOT NULL,
   type TEXT NOT NULL,
   link TEXT,
@@ -244,33 +275,22 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- 2. Initial Data
 
 -- Insert Default Permissions
-INSERT INTO permissions (id, name, description) VALUES
-  ('view_dashboard', 'View Dashboard', 'Access to the main dashboard'),
-  ('view_tasks', 'View Tasks', 'Ability to view tasks'),
-  ('manage_tasks', 'Manage Tasks', 'Ability to create, edit, and delete tasks'),
-  ('view_clients', 'View Clients', 'Ability to view client list'),
-  ('manage_clients', 'Manage Clients', 'Ability to create and edit clients'),
-  ('manage_settings', 'Manage Settings', 'Access to system settings'),
-  ('view_compliance', 'View Compliance', 'Access to compliance section')
+INSERT INTO permissions (id, name, description, module) VALUES
+  ('view_dashboard', 'View Dashboard', 'Access to the main dashboard', 'Core'),
+  ('view_tasks', 'View Tasks', 'Ability to view tasks', 'Tasks'),
+  ('manage_tasks', 'Manage Tasks', 'Ability to create, edit, and delete tasks', 'Tasks'),
+  ('view_clients', 'View Clients', 'Ability to view client list', 'Clients'),
+  ('manage_clients', 'Manage Clients', 'Ability to create and edit clients', 'Clients'),
+  ('manage_settings', 'Manage Settings', 'Access to system settings', 'Settings'),
+  ('view_compliance', 'View Compliance', 'Access to compliance section', 'Compliance')
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert Default Roles
-INSERT INTO roles (name, description) VALUES
-  ('Admin', 'Full system access'),
-  ('Manager', 'Manage tasks and clients'),
-  ('Staff', 'View and update assigned tasks')
+INSERT INTO roles (name, description, is_system, permissions) VALUES
+  ('Admin', 'Full system access', true, ARRAY['view_dashboard', 'view_tasks', 'manage_tasks', 'view_clients', 'manage_clients', 'manage_settings', 'view_compliance']),
+  ('Manager', 'Manage tasks and clients', true, ARRAY['view_dashboard', 'view_tasks', 'manage_tasks', 'view_clients', 'manage_clients', 'view_compliance']),
+  ('Staff', 'View and update assigned tasks', true, ARRAY['view_dashboard', 'view_tasks', 'view_clients', 'view_compliance'])
 ON CONFLICT (name) DO NOTHING;
-
--- Assign Permissions to Admin Role
-DO $$
-DECLARE
-  admin_id UUID;
-BEGIN
-  SELECT id INTO admin_id FROM roles WHERE name = 'Admin';
-  INSERT INTO role_permissions (role_id, permission_id)
-  SELECT admin_id, id FROM permissions
-  ON CONFLICT DO NOTHING;
-END $$;
 
 -- 3. RLS (Row Level Security)
 -- Enable RLS on all tables
@@ -281,7 +301,21 @@ BEGIN
     FOR t IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
         EXECUTE format('DROP POLICY IF EXISTS "Allow all for authenticated" ON %I;', t);
-        EXECUTE format('CREATE POLICY "Allow all for authenticated" ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true);', t);
+        -- Simple policy: users can only see/edit their own data (where profile_id matches)
+        -- For roles and permissions, they are readable by all authenticated users
+        IF t IN ('roles', 'permissions') THEN
+            EXECUTE format('CREATE POLICY "Allow read for authenticated" ON %I FOR SELECT TO authenticated USING (true);', t);
+        ELSE
+            -- Check if table has profile_id column
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = t AND column_name = 'profile_id') THEN
+                EXECUTE format('CREATE POLICY "Allow owner access" ON %I FOR ALL TO authenticated USING (auth.uid() = profile_id) WITH CHECK (auth.uid() = profile_id);', t);
+            ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = t AND column_name = 'id' AND t = 'user_profiles') THEN
+                EXECUTE format('CREATE POLICY "Allow owner access" ON %I FOR ALL TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);', t);
+            ELSE
+                -- Fallback for tables without profile_id (like role_permissions if it existed)
+                EXECUTE format('CREATE POLICY "Allow all for authenticated" ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true);', t);
+            END IF;
+        END IF;
     END LOOP;
 END $$;
 

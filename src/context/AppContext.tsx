@@ -225,8 +225,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setTasks(INIT_TASKS);
         // Seed DB for sample user if empty
         const tasksToInsert = INIT_TASKS.map(t => {
-          const dbTask: any = { ...t, client_id: t.clientId, assigned_to: t.assigneeId, reviewer_id: t.reviewerId, due_date: t.dueDate, issue_type: t.issueType, parent_id: t.parentId, statutory_deadline: t.statutoryDeadline, linked_tasks: t.linkedTasks, created_at: t.createdAt };
+          const dbTask: any = { 
+            ...t, 
+            profile_id: user.id,
+            client_id: t.clientId, 
+            assigned_to: t.assigneeId || user.id, 
+            reviewer_id: t.reviewerId || user.id, 
+            reporter_id: t.reporterId || user.id,
+            due_date: t.dueDate, 
+            issue_type: t.issueType, 
+            parent_id: t.parentId, 
+            statutory_deadline: t.statutoryDeadline, 
+            linked_tasks: t.linkedTasks, 
+            created_at: t.createdAt 
+          };
           delete dbTask.clientId; delete dbTask.assigneeId; delete dbTask.reviewerId; delete dbTask.dueDate; delete dbTask.issueType; delete dbTask.parentId; delete dbTask.statutoryDeadline; delete dbTask.linkedTasks; delete dbTask.createdAt;
+          delete dbTask.reporterId; delete dbTask.activity;
           return dbTask;
         });
         await supabase.from('tasks').insert(tasksToInsert);
@@ -243,7 +257,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } else if (isSampleUser) {
         setClients(INIT_CLIENTS);
         const clientsToInsert = INIT_CLIENTS.map(c => {
-          const dbClient: any = { ...c, onboarded_at: c.onboarded };
+          const dbClient: any = { ...c, profile_id: user.id, onboarded_at: c.onboarded };
           delete dbClient.onboarded;
           return dbClient;
         });
@@ -260,14 +274,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setter(initData);
           // Seed DB
           const toInsert = initData.map(item => {
-            const dbItem: any = { ...item, user_id: user.id, profile_id: user.id };
+            const dbItem: any = { ...item, profile_id: user.id };
             // Manual mapping for some tables
             if (table === 'deadlines') { dbItem.due_date = item.dueDate; dbItem.description = item.desc; delete dbItem.dueDate; delete dbItem.desc; }
             if (table === 'templates') { dbItem.est_hours = item.estHours; delete dbItem.estHours; }
             if (table === 'meetings') { dbItem.client_id = item.clientId; dbItem.meet_link = item.meetLink; delete dbItem.clientId; delete dbItem.meetLink; }
             if (table === 'notes') { dbItem.created_at = item.createdAt; dbItem.updated_at = item.updatedAt; delete dbItem.createdAt; delete dbItem.updatedAt; }
-            if (table === 'passwords') { dbItem.client_id = item.clientId; delete dbItem.clientId; }
-            if (table === 'documents') { dbItem.folder_id = item.folderId; dbItem.client_id = item.clientId; dbItem.uploaded_by = item.uploadedBy; dbItem.created_at = item.uploadedAt; delete dbItem.folderId; delete dbItem.clientId; delete dbItem.uploadedBy; delete dbItem.uploadedAt; }
+            if (table === 'passwords') { dbItem.client_id = item.clientId; dbItem.updated_at = item.lastUpdated; delete dbItem.clientId; delete dbItem.lastUpdated; }
+            if (table === 'documents') { dbItem.folder_id = item.folderId; dbItem.client_id = item.clientId; dbItem.uploaded_by = item.uploadedBy || user.id; dbItem.created_at = item.uploadedAt; delete dbItem.folderId; delete dbItem.clientId; delete dbItem.uploadedBy; delete dbItem.uploadedAt; }
             if (table === 'folders') { dbItem.parent_id = item.parentId; dbItem.client_id = item.clientId; delete dbItem.parentId; delete dbItem.clientId; }
             if (table === 'emails') { dbItem.from_email = item.fromEmail; dbItem.to_email = item.to; dbItem.client_id = item.clientId; dbItem.task_linked = item.taskLinked; delete dbItem.fromEmail; delete dbItem.to; delete dbItem.clientId; delete dbItem.taskLinked; }
             if (table === 'task_types') { dbItem.workflow_id = item.workflowId; delete dbItem.workflowId; }
@@ -289,8 +303,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await setAndSeed('emails', emailsData || [], setEmails, INIT_EMAILS, (e: any) => ({ ...e, fromEmail: e.from_email, to: e.to_email, clientId: e.client_id, taskLinked: e.task_linked }));
       await setAndSeed('task_types', taskTypesData || [], setTaskTypes, INIT_TASK_TYPES, (tt: any) => ({ ...tt, workflowId: tt.workflow_id }));
       setWorkflows(Array.isArray(workflowsData) && workflowsData.length > 0 ? workflowsData : (isSampleUser ? INIT_WORKFLOWS : []));
-      setRoles(Array.isArray(rolesData) && rolesData.length > 0 ? rolesData : INIT_ROLES);
-      setPermissions(Array.isArray(permissionsData) && permissionsData.length > 0 ? permissionsData : INIT_PERMISSIONS);
+      // Set roles and permissions
+      if (Array.isArray(rolesData) && rolesData.length > 0) {
+        setRoles(rolesData);
+      } else if (isSampleUser) {
+        setRoles(INIT_ROLES);
+        const rolesToInsert = INIT_ROLES.map(r => {
+          const dbRole: any = { ...r, is_system: r.isSystem };
+          delete dbRole.isSystem;
+          return dbRole;
+        });
+        await supabase.from('roles').insert(rolesToInsert);
+      } else {
+        setRoles(INIT_ROLES); // Fallback to defaults
+      }
+
+      if (Array.isArray(permissionsData) && permissionsData.length > 0) {
+        setPermissions(permissionsData);
+      } else if (isSampleUser) {
+        setPermissions(INIT_PERMISSIONS);
+        await supabase.from('permissions').insert(INIT_PERMISSIONS);
+      } else {
+        setPermissions(INIT_PERMISSIONS); // Fallback to defaults
+      }
       
       // Fallback to local storage for remaining non-table data
       const storageKey = `app-data-${user.id}`;
@@ -370,6 +405,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (updates.clientId) { dbUpdates.client_id = updates.clientId; delete dbUpdates.clientId; }
     if (updates.assigneeId) { dbUpdates.assigned_to = updates.assigneeId; delete dbUpdates.assigneeId; }
     if (updates.reviewerId) { dbUpdates.reviewer_id = updates.reviewerId; delete dbUpdates.reviewerId; }
+    if (updates.reporterId) { dbUpdates.reporter_id = updates.reporterId; delete dbUpdates.reporterId; }
     if (updates.dueDate) { dbUpdates.due_date = updates.dueDate; delete dbUpdates.dueDate; }
     if (updates.issueType) { dbUpdates.issue_type = updates.issueType; delete dbUpdates.issueType; }
     if (updates.parentId) { dbUpdates.parent_id = updates.parentId; delete dbUpdates.parentId; }
@@ -382,7 +418,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addTask = async (task: Task): Promise<string> => {
     let finalId = task.id;
-    let finalTask = { ...task };
+    let finalTask = { ...task, profile_id: currentUser?.id };
     
     setTasks(prev => {
       if (!task.id.startsWith('KDK-') || task.id.length > 20) {
@@ -420,6 +456,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     delete dbTask.statutoryDeadline;
     delete dbTask.linkedTasks;
     delete dbTask.createdAt;
+    delete dbTask.reporterId;
+    delete dbTask.activity;
 
     await supabase.from('tasks').insert(dbTask);
     return finalId;
@@ -441,7 +479,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const idMap: Record<string, string> = {};
       
       const tasksToAdd = newTasks.map((task, idx) => {
-        let finalTask = { ...task };
+        let finalTask = { ...task, profile_id: currentUser?.id };
         if (!task.id.startsWith('KDK-') || task.id.length > 20) {
           const newId = `KDK-${max + 1 + idx}`;
           idMap[task.id] = newId;
@@ -477,6 +515,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         delete dbTask.statutoryDeadline;
         delete dbTask.linkedTasks;
         delete dbTask.createdAt;
+        delete dbTask.reporterId;
+        delete dbTask.activity;
         tasksToInsert.push(dbTask);
       });
       
@@ -504,9 +544,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addClient = async (client: Client) => {
-    setClients(prev => [client, ...prev]);
+    const clientWithProfile = { ...client, profile_id: currentUser?.id };
+    setClients(prev => [clientWithProfile, ...prev]);
     
-    const dbClient: any = { ...client, onboarded_at: client.onboarded };
+    const dbClient: any = { ...clientWithProfile, onboarded_at: client.onboarded };
     delete dbClient.onboarded;
     
     await supabase.from('clients').insert(dbClient);
@@ -528,7 +569,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addNote = async (note: Note) => {
     const noteWithProfile = { ...note, profile_id: currentUser?.id };
     setNotes(prev => [noteWithProfile, ...prev]);
-    const dbNote: any = { ...noteWithProfile, user_id: currentUser?.id, created_at: note.createdAt, updated_at: note.updatedAt };
+    const dbNote: any = { ...noteWithProfile, created_at: note.createdAt, updated_at: note.updatedAt };
     delete dbNote.createdAt;
     delete dbNote.updatedAt;
     await supabase.from('notes').insert(dbNote);
@@ -572,8 +613,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addPassword = async (password: Password) => {
     const passwordWithProfile = { ...password, profile_id: currentUser?.id };
     setPasswords(prev => [passwordWithProfile, ...prev]);
-    const dbPassword: any = { ...passwordWithProfile, client_id: password.clientId };
+    const dbPassword: any = { 
+      ...passwordWithProfile, 
+      client_id: password.clientId,
+      updated_at: password.lastUpdated
+    };
     delete dbPassword.clientId;
+    delete dbPassword.lastUpdated;
     await supabase.from('passwords').insert(dbPassword);
   };
 
