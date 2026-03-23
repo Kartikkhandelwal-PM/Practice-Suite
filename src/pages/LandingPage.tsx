@@ -1,10 +1,135 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { CheckCircle2, ArrowRight, ShieldCheck, Sparkles, Building2, BarChart3, Menu, X, Users, Zap } from 'lucide-react';
+import { useApp } from '../context/AppContext';
+
+const DashboardPreview = () => {
+  const [imageError, setImageError] = useState(false);
+
+  if (!imageError) {
+    return (
+      <img 
+        src="/assets/dashboard.png" 
+        alt="Dashboard Preview" 
+        className="w-full h-full object-cover"
+        onError={() => setImageError(true)}
+        referrerPolicy="no-referrer"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-full w-full">
+      {/* Mock Sidebar */}
+      <div className="w-20 md:w-64 border-r border-white/10 bg-white/5 hidden sm:flex flex-col p-6">
+        <div className="h-8 w-32 bg-white/20 rounded-lg mb-10" />
+        <div className="space-y-6">
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="flex items-center gap-4">
+              <div className="h-5 w-5 bg-white/10 rounded" />
+              <div className="h-2 w-24 bg-white/5 rounded-full hidden md:block" />
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* Mock Dashboard Content */}
+      <div className="flex-1 p-8 overflow-hidden">
+        <div className="flex items-end justify-between mb-10">
+          <div>
+            <div className="h-1.5 w-24 bg-[#3a749b] rounded-full mb-3" />
+            <div className="h-7 w-64 bg-white/20 rounded-lg mb-2" />
+            <div className="h-2 w-48 bg-white/5 rounded-full" />
+          </div>
+          <div className="flex gap-3">
+            <div className="h-9 w-32 bg-white/5 border border-white/10 rounded-xl" />
+            <div className="h-9 w-36 bg-[#3a749b] rounded-xl shadow-lg shadow-[#3a749b]/20" />
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 mb-10">
+          {[
+            { label: 'Active Tasks', value: '24', color: 'bg-[#3a749b]', trend: '+12%' },
+            { label: 'Clients', value: '128', color: 'bg-emerald-500', trend: '+5%' },
+            { label: 'Deadlines', value: '12', color: 'bg-[#f57c73]', trend: '-2' },
+            { label: 'Revenue', value: '₹4.2L', color: 'bg-indigo-500', trend: '+18%' },
+          ].map((stat, i) => (
+            <div key={i} className="rounded-2xl bg-white/5 border border-white/10 p-3 md:p-5 flex flex-col justify-between hover:bg-white/[0.07] transition-colors group cursor-default">
+              <div className="flex justify-between items-start mb-4">
+                <div className={`w-8 h-8 md:w-10 md:h-10 rounded-xl ${stat.color}/10 flex items-center justify-center border border-${stat.color}/20`}>
+                  <div className={`w-3 h-3 md:w-4 md:h-4 rounded-sm ${stat.color}`} />
+                </div>
+                <div className="text-[10px] font-bold text-emerald-400">{stat.trend}</div>
+              </div>
+              <div>
+                <div className="h-1.5 md:h-2 w-12 md:w-16 bg-white/10 rounded-full mb-2" />
+                <div className="h-4 md:h-6 w-16 md:w-24 bg-white/40 rounded-lg" />
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <div className="lg:col-span-3 rounded-2xl bg-white/5 border border-white/10 p-4 md:p-6 flex flex-col">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <div className="h-4 w-40 bg-white/20 rounded-lg mb-1.5" />
+                <div className="h-2 w-24 bg-white/5 rounded-full" />
+              </div>
+              <div className="hidden sm:flex gap-2">
+                <div className="h-7 w-20 bg-white/5 rounded-lg" />
+                <div className="h-7 w-7 bg-white/5 rounded-lg" />
+              </div>
+            </div>
+            <div className="space-y-3.5 flex-1">
+              {[
+                { title: 'GST Filing - Reliance Ind.', status: 'High', date: '2 days left', color: 'bg-[#f57c73]' },
+                { title: 'Audit Report - Tata Steel', status: 'Medium', date: '5 days left', color: 'bg-[#3a749b]' },
+                { title: 'TDS Reconciliation', status: 'Low', date: 'Next week', color: 'bg-emerald-500' },
+                { title: 'Income Tax Return - Sharma', status: 'High', date: 'Tomorrow', color: 'bg-[#f57c73]' },
+              ].map((task, i) => (
+                <div key={i} className="h-14 rounded-xl bg-white/[0.03] border border-white/5 flex items-center px-4 md:px-5 justify-between hover:bg-white/[0.06] transition-colors">
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <div className={`w-2 h-2 rounded-full ${task.color} shadow-lg shadow-${task.color}/50`} />
+                    <div>
+                      <div className="h-2 w-32 md:w-48 bg-white/20 rounded-full mb-1.5" />
+                      <div className="h-1.5 w-20 md:w-32 bg-white/5 rounded-full" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 md:gap-4">
+                    <div className="hidden sm:block h-2 w-16 bg-white/10 rounded-full" />
+                    <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-white/5 border border-white/10" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="lg:col-span-2 rounded-2xl bg-white/5 border border-white/10 p-4 md:p-6 flex flex-col">
+            <div className="flex justify-between items-center mb-8">
+              <div className="h-4 w-32 bg-white/20 rounded-lg" />
+              <div className="h-2 w-16 bg-white/5 rounded-full" />
+            </div>
+            <div className="flex-1 flex items-end gap-2 md:gap-3 h-40 md:h-48 px-2 mb-6">
+              {[35, 65, 45, 85, 55, 75, 40, 60, 25, 50, 70, 90].map((h, i) => (
+                <div key={i} className="flex-1 bg-gradient-to-t from-[#3a749b]/20 to-[#3a749b]/60 rounded-t-lg transition-all hover:to-[#3a749b] cursor-pointer" style={{ height: `${h}%` }} />
+              ))}
+            </div>
+            <div className="flex justify-between pt-4 border-t border-white/5">
+              {[1, 2, 3, 4, 5].map(i => (
+                <div key={i} className="h-1.5 w-8 md:w-10 bg-white/5 rounded-full" />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export function LandingPage() {
   const navigate = useNavigate();
+  const { currentUser } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   return (
@@ -63,7 +188,7 @@ export function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 relative bg-[#0d1117] text-white overflow-hidden">
+      <section className="pt-24 sm:pt-32 pb-16 sm:pb-20 px-4 sm:px-6 lg:px-8 relative bg-[#0d1117] text-white overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#3a749b]/20 blur-[100px] pointer-events-none" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#f57c73]/20 blur-[100px] pointer-events-none" />
         
@@ -74,29 +199,29 @@ export function LandingPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 shadow-sm mb-8">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 shadow-sm mb-6 sm:mb-8">
                 <Sparkles size={14} className="text-[#f57c73]" />
-                <span className="text-[12px] font-medium text-white/70">The modern operating system for CA & Tax Professionals</span>
+                <span className="text-[10px] sm:text-[12px] font-medium text-white/70 uppercase tracking-wider">The modern operating system for CA & Tax Professionals</span>
               </div>
               
-              <h1 className="text-5xl md:text-6xl lg:text-7xl font-serif font-bold tracking-tight text-white mb-6 leading-[1.1]">
+              <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-serif font-bold tracking-tight text-white mb-4 sm:mb-6 leading-[1.1] px-2">
                 Manage your practice with <span className="text-[#3a749b]">precision</span> & <span className="text-[#f57c73]">clarity</span>.
               </h1>
               
-              <p className="text-lg md:text-xl text-white/70 mb-10 leading-relaxed max-w-2xl mx-auto">
+              <p className="text-[14px] sm:text-lg md:text-xl text-white/70 mb-8 sm:mb-10 leading-relaxed max-w-2xl mx-auto px-4">
                 Streamline compliance, automate workflows, and manage client communications from a single, unified workspace designed specifically for modern accounting firms.
               </p>
               
-              <div className="flex flex-col sm:flex-row justify-center gap-4">
+              <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 px-6">
                 <button 
                   onClick={() => navigate('/login')}
-                  className="bg-[#3a749b] hover:bg-[#2d5a7a] text-white px-8 py-3.5 rounded-xl text-[15px] font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+                  className="bg-[#3a749b] hover:bg-[#2d5a7a] text-white px-8 py-3.5 rounded-xl text-[14px] sm:text-[15px] font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 w-full sm:w-auto"
                 >
                   Start your free trial <ArrowRight size={18} />
                 </button>
                 <button 
                   onClick={() => navigate('/login')}
-                  className="bg-white/5 hover:bg-white/10 text-white border border-white/10 px-8 py-3.5 rounded-xl text-[15px] font-medium transition-all shadow-sm hover:shadow flex items-center justify-center"
+                  className="bg-white/5 hover:bg-white/10 text-white border border-white/10 px-8 py-3.5 rounded-xl text-[14px] sm:text-[15px] font-medium transition-all shadow-sm hover:shadow flex items-center justify-center w-full sm:w-auto"
                 >
                   Book a Demo
                 </button>
@@ -105,21 +230,21 @@ export function LandingPage() {
           </div>
         </div>
 
-        {/* Dashboard Preview Image */}
+        {/* Dashboard Preview Mockup */}
         <motion.div 
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.2 }}
-          className="mt-20 relative mx-auto max-w-6xl z-10"
+          className="mt-12 sm:mt-20 relative mx-auto max-w-6xl z-10 px-4 sm:px-0"
         >
-          <div className="rounded-2xl border border-white/10 shadow-2xl overflow-hidden bg-white/5 p-2">
-            <div className="rounded-xl overflow-hidden border border-white/10 bg-black/50">
-              <img 
-                src="https://i.postimg.cc/PJry9gH0/Screenshot-2026-03-18-182149.png" 
-                alt="Dashboard Preview" 
-                className="w-full h-auto object-cover opacity-90"
-                referrerPolicy="no-referrer"
-              />
+          <div className="absolute -top-6 sm:-top-10 left-1/2 -translate-x-1/2 bg-[#3a749b] text-white px-3 sm:px-4 py-1 rounded-full text-[9px] sm:text-[11px] font-bold tracking-widest uppercase shadow-lg z-20 whitespace-nowrap">
+            Dashboard Preview
+          </div>
+          <div className="rounded-xl sm:rounded-2xl border border-white/10 shadow-2xl overflow-hidden bg-[#0d1117] p-1 sm:p-1.5 ring-1 ring-white/10">
+            <div className="relative group">
+              <div className="rounded-lg sm:rounded-xl overflow-hidden border border-white/10 bg-[#0d1117] aspect-[16/10] flex flex-col shadow-inner">
+                <DashboardPreview />
+              </div>
             </div>
           </div>
         </motion.div>

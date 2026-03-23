@@ -2,14 +2,13 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { Settings, Users, Bell, Link as LinkIcon, Shield, Plus, Edit2, Trash2, Check, X, Mail, Sliders, ShieldCheck, Zap, Clock, LogOut, CheckCircle2 } from 'lucide-react';
+import { Settings, Users, Bell, Link as LinkIcon, Shield, Plus, Edit2, Trash2, Check, X, Mail, Sliders, Zap, LogOut, CheckCircle2, AlertCircle, Copy } from 'lucide-react';
 import { PageHeader } from '../components/ui/PageHeader';
 import { User, TaskTypeConfig, Workflow, Role, Permission } from '../types';
 import { genUUID } from '../utils';
 import { Modal } from '../components/ui/Modal';
 import { Avatar } from '../components/ui/Avatar';
 import { IconRenderer } from '../components/ui/IconRenderer';
-import { supabase } from '../lib/supabase';
 
 export function SettingsPage() {
   const { 
@@ -17,7 +16,8 @@ export function SettingsPage() {
     updateUser, addUser, deleteUser, 
     updateTaskType, addTaskType, deleteTaskType, 
     updateWorkflow, addWorkflow, deleteWorkflow,
-    updateRole, addRole, deleteRole, logout, seedSampleData 
+    updateRole, addRole, deleteRole, logout,
+    currentUser
   } = useApp();
   const toast = useToast();
   const { confirm } = useConfirm();
@@ -235,6 +235,26 @@ export function SettingsPage() {
                   <input className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-blue-600" defaultValue="KDK Practice Suite" />
                 </div>
                 <div>
+                  <label className="block text-[12px] font-semibold text-gray-700 mb-1.5">Dashboard Preview Image URL</label>
+                  <div className="flex gap-2">
+                    <input 
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-blue-600" 
+                      placeholder="https://images.unsplash.com/..."
+                      value={currentUser?.dashboardImageUrl || ''}
+                      onChange={(e) => updateUser(currentUser?.id || '', { dashboardImageUrl: e.target.value })}
+                    />
+                    {currentUser?.dashboardImageUrl && (
+                      <button 
+                        onClick={() => updateUser(currentUser?.id || '', { dashboardImageUrl: '' })}
+                        className="px-3 py-2 border border-gray-200 rounded-lg text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-1">This image will be shown as a preview on your landing page.</p>
+                </div>
+                <div>
                   <label className="block text-[12px] font-semibold text-gray-700 mb-1.5">Timezone</label>
                   <select className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-blue-600 bg-white">
                     <option>Asia/Kolkata (IST)</option>
@@ -247,19 +267,8 @@ export function SettingsPage() {
               </div>
 
               <div className="pt-8 border-t border-gray-100">
-                <h2 className="text-[16px] font-semibold text-gray-900 mb-2">Data Management</h2>
-                <p className="text-[13px] text-gray-500 mb-4">Populate your workspace with sample data to explore features.</p>
-                <button 
-                  onClick={async () => {
-                    if (await confirm({ title: 'Seed Sample Data', message: 'This will add sample tasks, clients, and deadlines to your workspace. Continue?' })) {
-                      await seedSampleData();
-                      toast('Sample data seeded successfully', 'success');
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  <Zap size={16} className="text-amber-500" /> Seed Sample Data
-                </button>
+                <h2 className="text-[16px] font-semibold text-gray-900 mb-2">Account Settings</h2>
+                <p className="text-[13px] text-gray-500 mb-4">Manage your account and subscription preferences.</p>
               </div>
             </div>
           )}

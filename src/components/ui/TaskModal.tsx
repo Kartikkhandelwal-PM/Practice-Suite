@@ -24,7 +24,7 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
 
   const [form, setForm] = useState<Task>(() => {
     if (task) {
-      if (!task.id && task.subtasks && task.subtasks.length > 0) {
+      if (!task.id && Array.isArray(task.subtasks) && task.subtasks.length > 0) {
         return { ...task, subtasks: [] };
       }
       return { ...task };
@@ -57,11 +57,14 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
 
   const [selectedTemplate, setSelectedTemplate] = useState(templateId || '');
   const [newComment, setNewComment] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const tenantPrefix = currentUser?.tenantId ? currentUser.tenantId.substring(0, 4).toUpperCase() : 'KDK';
+
   const [pendingSubtasks, setPendingSubtasks] = useState<Partial<Task>[]>(() => {
-    if (task && !task.id && task.subtasks) {
+    if (task && !task.id && Array.isArray(task.subtasks)) {
       let max = 0;
       tasks.forEach(t => {
-        if (t.id.startsWith('KDK-')) {
+        if (t.id.startsWith(`${tenantPrefix}-`)) {
           const num = parseInt(t.id.split('-')[1], 10);
           if (!isNaN(num) && num > max) max = num;
         }
@@ -70,7 +73,7 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
       return task.subtasks.map(s => {
         currentMax++;
         return {
-          id: `KDK-${currentMax}`,
+          id: `${tenantPrefix}-${currentMax}`,
           title: s.title,
           status: s.done ? 'Completed' : 'To Do',
           priority: task.priority,
@@ -94,23 +97,25 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
       toast('Title, Client, and Due Date are required', 'error');
       return;
     }
+    if (isSaving) return;
+    setIsSaving(true);
     
     try {
       if (isNew) {
         let max = 0;
         tasks.forEach(t => {
-          if (t.id.startsWith('KDK-')) {
+          if (t.id.startsWith(`${tenantPrefix}-`)) {
             const num = parseInt(t.id.split('-')[1], 10);
             if (!isNaN(num) && num > max) max = num;
           }
         });
         pendingSubtasks.forEach(pst => {
-          if (pst.id && pst.id.startsWith('KDK-')) {
+          if (pst.id && pst.id.startsWith(`${tenantPrefix}-`)) {
             const num = parseInt(pst.id.split('-')[1], 10);
             if (!isNaN(num) && num > max) max = num;
           }
         });
-        const newId = `KDK-${max + 1}`;
+        const newId = `${tenantPrefix}-${max + 1}`;
         const newTask = { ...form, id: newId };
         
         await addTask(newTask);
@@ -118,7 +123,7 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
         if (pendingSubtasks.length > 0) {
           await Promise.all(pendingSubtasks.map(async (pst, idx) => {
             const subtask: Task = {
-              id: pst.id || `KDK-${max + 2 + idx}`,
+              id: pst.id || `${tenantPrefix}-${max + 2 + idx}`,
               title: pst.title || 'Untitled Subtask',
               clientId: form.clientId,
               type: form.type,
@@ -173,6 +178,8 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
     } catch (error) {
       console.error('Error saving task:', error);
       toast('Failed to save task', 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -187,16 +194,16 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
         description: f.description ? `${f.description}\n\n${tmpl.description}` : tmpl.description,
       }));
       
-      if (tmpl.subtasks && tmpl.subtasks.length > 0) {
+      if (Array.isArray(tmpl.subtasks) && tmpl.subtasks.length > 0) {
         let max = 0;
         tasks.forEach(t => {
-          if (t.id.startsWith('KDK-')) {
+          if (t.id.startsWith(`${tenantPrefix}-`)) {
             const num = parseInt(t.id.split('-')[1], 10);
             if (!isNaN(num) && num > max) max = num;
           }
         });
         pendingSubtasks.forEach(pst => {
-          if (pst.id && pst.id.startsWith('KDK-')) {
+          if (pst.id && pst.id.startsWith(`${tenantPrefix}-`)) {
             const num = parseInt(pst.id.split('-')[1], 10);
             if (!isNaN(num) && num > max) max = num;
           }
@@ -206,7 +213,7 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
         const templateSubtasks: Partial<Task>[] = tmpl.subtasks.map(title => {
           currentMax++;
           return {
-            id: `KDK-${currentMax}`,
+            id: `${tenantPrefix}-${currentMax}`,
             title,
             status: 'To Do',
             priority: form.priority,
@@ -309,19 +316,19 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
 
     let max = 0;
     tasks.forEach(t => {
-      if (t.id.startsWith('KDK-')) {
+      if (t.id.startsWith(`${tenantPrefix}-`)) {
         const num = parseInt(t.id.split('-')[1], 10);
         if (!isNaN(num) && num > max) max = num;
       }
     });
     pendingSubtasks.forEach(pst => {
-      if (pst.id && pst.id.startsWith('KDK-')) {
+      if (pst.id && pst.id.startsWith(`${tenantPrefix}-`)) {
         const num = parseInt(pst.id.split('-')[1], 10);
         if (!isNaN(num) && num > max) max = num;
       }
     });
     
-    const newId = `KDK-${max + 1}`;
+    const newId = `${tenantPrefix}-${max + 1}`;
 
     if (isNew) {
       setPendingSubtasks(prev => [...prev, { 
@@ -483,7 +490,7 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
       footer={
         <div className="flex items-center justify-end w-full gap-2">
           <button className="px-4 py-2 rounded-lg font-medium text-[13px] bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors" onClick={onClose}>Cancel</button>
-          <button className="px-4 py-2 rounded-lg font-medium text-[13px] bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm" onClick={save}>{!isNew ? 'Save Changes' : 'Create Task'}</button>
+          <button className="px-4 py-2 rounded-lg font-medium text-[13px] bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed" onClick={save} disabled={isSaving}>{isSaving ? 'Saving...' : (!isNew ? 'Save Changes' : 'Create Task')}</button>
         </div>
       }
     >
@@ -602,7 +609,7 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
                   </div>
 
                   <div className="border border-gray-200 rounded-xl bg-white shadow-sm">
-                    {(childTasks.length > 0 || pendingSubtasks.length > 0 || (form.subtasks && form.subtasks.length > 0)) ? (
+                    {(childTasks.length > 0 || pendingSubtasks.length > 0 || (Array.isArray(form.subtasks) && form.subtasks.length > 0)) ? (
                       <div className="divide-y divide-gray-100">
                         {form.subtasks?.map((st, idx) => (
                           <div key={st.id} className="relative focus-within:z-10 flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors group">

@@ -1,21 +1,23 @@
 export interface User {
   id: string;
-  profile_id?: string;
+  tenantId?: string;
   name: string;
   email: string;
   role: string;
+  roleId?: string;
   designation: string;
   color: string;
   active: boolean;
   avatarUrl?: string;
+  dashboardImageUrl?: string;
 }
 
 export interface Client {
   id: string;
-  profile_id?: string;
   name: string;
   pan: string;
   gstin: string;
+  type?: string;
   category: string;
   services: string[];
   manager: string;
@@ -57,7 +59,6 @@ export interface Activity {
 
 export interface Task {
   id: string;
-  profile_id?: string;
   title: string;
   clientId: string;
   type: string;
@@ -76,6 +77,8 @@ export interface Task {
   linkedTasks?: string[];
   dependencies?: string[];
   statutoryDeadline?: string;
+  period?: string; // e.g., "2024-10"
+  uniqueKey?: string; // tenant_id:client_id:type:period
   subtasks: Subtask[];
   comments: Comment[];
   attachments: Attachment[];
@@ -84,10 +87,10 @@ export interface Task {
 
 export interface TaskTypeConfig {
   id: string;
-  profile_id?: string;
   name: string;
   icon: string;
   color: string;
+  category?: string;
   description?: string;
   workflowId?: string;
 }
@@ -99,7 +102,6 @@ export interface WorkflowTransition {
 
 export interface Workflow {
   id: string;
-  profile_id?: string;
   name: string;
   description?: string;
   statuses: string[];
@@ -108,10 +110,10 @@ export interface Workflow {
 
 export interface Deadline {
   id: string;
-  profile_id?: string;
   title: string;
   desc: string;
   category: string;
+  priority?: string;
   dueDate: string;
   clients: number;
   form: string;
@@ -120,8 +122,8 @@ export interface Deadline {
 
 export interface Template {
   id: string;
-  profile_id?: string;
   name: string;
+  type: string;
   category: string;
   recurring: string;
   estHours: string;
@@ -132,7 +134,6 @@ export interface Template {
 
 export interface Email {
   id: string;
-  profile_id?: string;
   from: string;
   fromEmail: string;
   to?: string;
@@ -155,18 +156,18 @@ export interface Email {
 
 export interface Note {
   id: string;
-  profile_id?: string;
   title: string;
   content: string;
+  category?: string;
   color: string;
   pinned: boolean;
+  createdBy?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface Password {
   id: string;
-  profile_id?: string;
   clientId: string;
   portal: string;
   url: string;
@@ -180,8 +181,7 @@ export interface Password {
 
 export interface Document {
   id: string;
-  profile_id?: string;
-  folderId: string;
+  folderId: string | null;
   name: string;
   type: string;
   size: string;
@@ -195,7 +195,6 @@ export interface Document {
 
 export interface Folder {
   id: string;
-  profile_id?: string;
   name: string;
   parentId: string | null;
   clientId: string | null;
@@ -204,7 +203,6 @@ export interface Folder {
 
 export interface Meeting {
   id: string;
-  profile_id?: string;
   title: string;
   clientId: string;
   type: string;
@@ -238,7 +236,6 @@ export interface Permission {
 
 export interface Role {
   id: string;
-  profile_id?: string;
   name: string;
   description: string;
   permissions: string[]; // Array of permission IDs

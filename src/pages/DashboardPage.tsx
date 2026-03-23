@@ -15,6 +15,7 @@ export function DashboardPage() {
   const { tasks, clients, users, deadlines, meetings, taskTypes, workflows, currentUser, updateTask } = useApp();
   const toast = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
+
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [activeView, setActiveView] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -49,8 +50,9 @@ export function DashboardPage() {
   };
 
   const filteredTasks = tasks.filter(t => {
-    if (currentUser?.role?.toLowerCase() === 'admin') return true;
-    return t.assigneeId === currentUser?.id || t.reviewerId === currentUser?.id;
+    const role = currentUser?.role?.toLowerCase();
+    if (role === 'admin' || role === 'manager') return true;
+    return t.assigneeId === currentUser?.id || t.reviewerId === currentUser?.id || t.reporterId === currentUser?.id;
   });
 
   const overdue = filteredTasks.filter(t => t.status !== 'Completed' && (daysLeft(t.dueDate) ?? 0) < 0);
@@ -199,7 +201,7 @@ export function DashboardPage() {
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-1 rounded border border-gray-100">#{t.id}</span>
                       <div className="font-medium text-[13px] truncate text-gray-900 group-hover:text-blue-600 transition-colors">{t.title}</div>
-                      {t.subtasks && t.subtasks.length > 0 && (
+                      {Array.isArray(t.subtasks) && t.subtasks.length > 0 && (
                         <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded shrink-0" title={`${t.subtasks.filter(s => s.done).length}/${t.subtasks.length} checklist items done`}>
                           <CheckCircle2 size={10} />
                           <span>{t.subtasks.filter(s => s.done).length}/{t.subtasks.length}</span>

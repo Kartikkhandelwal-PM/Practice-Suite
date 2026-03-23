@@ -25,7 +25,7 @@ export function TemplatesPage() {
   const filtered = templates.filter(t => !filter || t.category === filter || filter === 'All');
 
   const openCreate = () => {
-    setForm({ id: genUUID(), name: '', category: 'GST', recurring: 'Monthly', estHours: '', description: '', subtasks: [], color: '#2563eb' });
+    setForm({ id: genUUID(), name: '', type: 'GST', category: 'GST', recurring: 'Monthly', estHours: '', description: '', subtasks: [], color: '#2563eb' });
     setModal('create');
   };
   
@@ -39,10 +39,10 @@ export function TemplatesPage() {
       ...tasks[0], // Get default structure
       id: '', // Will be generated in TaskModal
       title: t.name,
-      type: t.category,
+      type: t.type || t.category,
       description: t.description,
       recurring: t.recurring,
-      subtasks: t.subtasks.map(s => ({ id: genUUID(), title: s, done: false })),
+      subtasks: Array.isArray(t.subtasks) ? t.subtasks.map(s => ({ id: genUUID(), title: s, done: false })) : [],
       status: 'To Do',
       dueDate: fmt(today),
       tags: [],
@@ -131,20 +131,20 @@ export function TemplatesPage() {
             <p className="text-[12px] text-gray-500 leading-relaxed mb-3 min-h-[40px] line-clamp-2">{t.description || 'No description.'}</p>
             
             <div className="text-[11px] text-gray-400 mb-3 flex items-center gap-2">
-              <span className="font-medium text-gray-600">{t.subtasks.length} steps</span>
+              <span className="font-medium text-gray-600">{Array.isArray(t.subtasks) ? t.subtasks.length : 0} steps</span>
               {t.estHours && <span>• {t.estHours} hrs est.</span>}
             </div>
             
             <div className="border-t border-gray-100 pt-3 mt-1">
               <div className="text-[10px] font-bold text-gray-400 tracking-wider uppercase mb-2">Steps Included:</div>
               <div className="space-y-1.5">
-                {t.subtasks.slice(0, 3).map((s, i) => (
+                {Array.isArray(t.subtasks) && t.subtasks.slice(0, 3).map((s, i) => (
                   <div key={i} className="flex items-start gap-2 text-[11.5px] text-gray-600">
                     <span className="w-4 h-4 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5">{i + 1}</span>
                     <span className="truncate">{s}</span>
                   </div>
                 ))}
-                {t.subtasks.length > 3 && <div className="text-[11px] text-gray-400 ml-6 italic">+{t.subtasks.length - 3} more steps</div>}
+                {Array.isArray(t.subtasks) && t.subtasks.length > 3 && <div className="text-[11px] text-gray-400 ml-6 italic">+{t.subtasks.length - 3} more steps</div>}
               </div>
             </div>
             
@@ -180,9 +180,9 @@ export function TemplatesPage() {
           </div>
           <p className="text-[13px] text-gray-700 leading-relaxed mb-5">{selected.description}</p>
           
-          <div className="font-semibold text-[12px] text-gray-500 mb-3 uppercase tracking-wider">All {selected.subtasks.length} Steps:</div>
+          <div className="font-semibold text-[12px] text-gray-500 mb-3 uppercase tracking-wider">All {Array.isArray(selected.subtasks) ? selected.subtasks.length : 0} Steps:</div>
           <div className="space-y-0">
-            {selected.subtasks.map((s, i) => (
+            {Array.isArray(selected.subtasks) && selected.subtasks.map((s, i) => (
               <div key={i} className="flex items-center gap-3 py-2.5 border-b border-gray-100 last:border-0">
                 <span className="w-[22px] h-[22px] rounded-full flex items-center justify-center text-[10px] font-bold shrink-0" style={{ background: selected.color + '22', color: selected.color }}>{i + 1}</span>
                 <span className="text-[13px] text-gray-800">{s}</span>
@@ -215,7 +215,7 @@ export function TemplatesPage() {
               <input 
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13.5px] outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 bg-white" 
                 value={form.category} 
-                onChange={e => setForm(f => f ? { ...f, category: e.target.value } : null)}
+                onChange={e => setForm(f => f ? { ...f, category: e.target.value, type: e.target.value } : null)}
                 placeholder="e.g., GST, TDS, Custom Category"
                 list="template-categories"
               />
@@ -260,22 +260,22 @@ export function TemplatesPage() {
           <div>
             <label className="block text-[11.5px] font-semibold text-gray-500 mb-2">Steps / Subtasks</label>
             <div className="space-y-2 mb-3">
-              {form.subtasks.map((s, i) => (
+              {Array.isArray(form.subtasks) && form.subtasks.map((s, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <div className="cursor-grab text-gray-400 hover:text-gray-600"><GripVertical size={14} /></div>
                   <div className="w-[22px] h-[22px] bg-gray-100 rounded-full flex items-center justify-center text-[10px] font-bold text-gray-500 shrink-0">{i + 1}</div>
                   <input 
                     className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-blue-600" 
                     value={s} 
-                    onChange={e => setForm(f => f ? { ...f, subtasks: f.subtasks.map((x, j) => j === i ? e.target.value : x) } : null)} 
+                    onChange={e => setForm(f => f ? { ...f, subtasks: Array.isArray(f.subtasks) ? f.subtasks.map((x, j) => j === i ? e.target.value : x) : [] } : null)} 
                   />
-                  <button className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => setForm(f => f ? { ...f, subtasks: f.subtasks.filter((_, j) => j !== i) } : null)}>
+                  <button className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => setForm(f => f ? { ...f, subtasks: Array.isArray(f.subtasks) ? f.subtasks.filter((_, j) => j !== i) : [] } : null)}>
                     <X size={14} />
                   </button>
                 </div>
               ))}
             </div>
-            <button className="bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-[12px] font-medium flex items-center gap-1.5 transition-colors" onClick={() => setForm(f => f ? { ...f, subtasks: [...f.subtasks, ''] } : null)}>
+            <button className="bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-[12px] font-medium flex items-center gap-1.5 transition-colors" onClick={() => setForm(f => f ? { ...f, subtasks: Array.isArray(f.subtasks) ? [...f.subtasks, ''] : [''] } : null)}>
               <Plus size={14} /> Add Step
             </button>
           </div>

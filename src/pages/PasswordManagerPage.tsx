@@ -18,6 +18,7 @@ export function PasswordManagerPage() {
   const [filterCat, setFilterCat] = useState('');
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState<Password | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [showPw, setShowPw] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState('');
   const [showModalPw, setShowModalPw] = useState(false);
@@ -72,6 +73,8 @@ export function PasswordManagerPage() {
 
   const save = async () => {
     if (!form?.portal || !form?.username || !form?.password || !form?.clientId) { toast('Client, Portal, username and password are required', 'error'); return; }
+    if (isSaving) return;
+    setIsSaving(true);
     const s = pwStrength(form.password);
     const updated = { ...form, strength: s, lastUpdated: fmt(today) };
     try {
@@ -86,6 +89,8 @@ export function PasswordManagerPage() {
     } catch (error) {
       console.error('Error saving password:', error);
       toast('Failed to save password', 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -297,7 +302,7 @@ export function PasswordManagerPage() {
         <Modal title={form.id ? 'Edit Credential' : 'Add Credential'} onClose={() => setModal(false)} footer={
           <>
             <button className="px-3.5 py-2 rounded-lg font-medium text-[13px] bg-white border border-gray-200 text-gray-700 hover:bg-gray-50" onClick={() => setModal(false)}>Cancel</button>
-            <button className="px-3.5 py-2 rounded-lg font-medium text-[13px] bg-blue-600 text-white hover:bg-blue-700" onClick={save}>Save Credential</button>
+            <button className="px-3.5 py-2 rounded-lg font-medium text-[13px] bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed" onClick={save} disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Credential'}</button>
           </>
         }>
           <div className="space-y-4">

@@ -29,6 +29,7 @@ export function MeetingCalendarPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState<Meeting | null>(null);
   const [search, setSearch] = useState('');
 
@@ -63,6 +64,8 @@ export function MeetingCalendarPage() {
 
   const save = async () => {
     if (!form?.title || !form?.date || !form?.time) { toast('Title, date and time are required', 'error'); return; }
+    if (isSaving) return;
+    setIsSaving(true);
     try {
       if (meetings.find(m => m.id === form.id)) {
         await updateMeeting(form.id, form);
@@ -75,6 +78,8 @@ export function MeetingCalendarPage() {
     } catch (error) {
       console.error('Error saving meeting:', error);
       toast('Failed to save meeting', 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -511,8 +516,8 @@ export function MeetingCalendarPage() {
             footer={
               <div className="flex items-center justify-end gap-2 w-full">
                 <button className="px-4 py-2 rounded-xl font-medium text-[13px] bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors" onClick={() => setIsModalOpen(false)}>Cancel</button>
-                <button className="px-4 py-2 rounded-xl font-bold text-[13px] bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-md" onClick={save}>
-                  {meetings.find(m => m.id === form.id) ? 'Save Changes' : 'Schedule Meeting'}
+                <button className="px-4 py-2 rounded-xl font-bold text-[13px] bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed" onClick={save} disabled={isSaving}>
+                  {isSaving ? 'Saving...' : (meetings.find(m => m.id === form.id) ? 'Save Changes' : 'Schedule Meeting')}
                 </button>
               </div>
             }

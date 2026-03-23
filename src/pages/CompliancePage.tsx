@@ -22,6 +22,7 @@ export function CompliancePage() {
   const [newCategory, setNewCategory] = useState('');
   
   const [showHowItWorks, setShowHowItWorks] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   const [newDeadline, setNewDeadline] = useState<Partial<Deadline>>({
     title: '',
@@ -53,6 +54,8 @@ export function CompliancePage() {
       toast('Please fill all required fields', 'error');
       return;
     }
+    if (isSaving) return;
+    setIsSaving(true);
     
     try {
       if (newDeadline.id) {
@@ -91,6 +94,8 @@ export function CompliancePage() {
       });
     } catch (error) {
       toast('Failed to save compliance deadline', 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -520,9 +525,10 @@ export function CompliancePage() {
               </button>
               <button 
                 onClick={handleAddCompliance}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isSaving}
               >
-                {newDeadline.id ? "Save Changes" : "Add Deadline"}
+                {isSaving ? "Saving..." : (newDeadline.id ? "Save Changes" : "Add Deadline")}
               </button>
             </div>
           }

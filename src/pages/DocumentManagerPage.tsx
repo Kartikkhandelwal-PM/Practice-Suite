@@ -20,10 +20,11 @@ export function DocumentManagerPage() {
   const [filterTag, setFilterTag] = useState('');
   const [modal, setModal] = useState<'upload' | null>(null);
   const [form, setForm] = useState<Document | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
   const [folderModal, setFolderModal] = useState(false);
   const [folderForm, setFolderForm] = useState<FolderType | null>(null);
-  const [expandedFolders, setExpandedFolders] = useState<string[]>(['f1', 'f2', 'f3']);
+  const [expandedFolders, setExpandedFolders] = useState<string[]>([]);
   const [expandedClients, setExpandedClients] = useState<string[]>([]);
 
   const [showSidebar, setShowSidebar] = useState(false);
@@ -155,11 +156,11 @@ export function DocumentManagerPage() {
   const openUpload = () => {
     setForm({ 
       id: genUUID(), 
-      folderId: activeSelection.type === 'folder' ? activeSelection.id! : 'f1', 
+      folderId: activeSelection.type === 'folder' ? activeSelection.id! : (folders.length > 0 ? folders[0].id : null), 
       name: '', 
       type: 'pdf', 
       size: '0 KB', 
-      clientId: activeSelection.type === 'client' ? activeSelection.id! : '', 
+      clientId: activeSelection.type === 'client' ? activeSelection.id! : null, 
       tags: [], 
       description: '', 
       uploadedBy: currentUser?.id || 'u1', 
@@ -170,6 +171,8 @@ export function DocumentManagerPage() {
   
   const saveDoc = async () => {
     if (!form?.name) { toast('File name required', 'error'); return; }
+    if (isSaving) return;
+    setIsSaving(true);
     try {
       await addDocument(form);
       toast('Document added', 'success');
@@ -178,6 +181,8 @@ export function DocumentManagerPage() {
     } catch (error) {
       console.error('Error saving document:', error);
       toast('Failed to save document', 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -215,7 +220,7 @@ export function DocumentManagerPage() {
       id: genUUID(), 
       name: '', 
       parentId: parentId || (activeSelection.type === 'folder' ? activeSelection.id! : null), 
-      clientId: activeSelection.type === 'client' ? activeSelection.id! : '', 
+      clientId: activeSelection.type === 'client' ? activeSelection.id! : null, 
       icon: 'folder' 
     });
     setFolderModal(true);
@@ -418,8 +423,8 @@ export function DocumentManagerPage() {
           footer={
             <>
               <button className="px-3.5 py-2 rounded-lg font-medium text-[13px] bg-white border border-gray-200 text-gray-700 hover:bg-gray-50" onClick={() => setModal(null)}>Cancel</button>
-              <button className="px-3.5 py-2 rounded-lg font-medium text-[13px] bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1.5" onClick={saveDoc}>
-                <Upload size={14} /> Upload
+              <button className="px-3.5 py-2 rounded-lg font-medium text-[13px] bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed" onClick={saveDoc} disabled={isSaving}>
+                <Upload size={14} /> {isSaving ? 'Uploading...' : 'Upload'}
               </button>
             </>
           }

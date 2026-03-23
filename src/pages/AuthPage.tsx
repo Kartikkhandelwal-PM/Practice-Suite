@@ -28,18 +28,21 @@ export function AuthPage() {
           }
         });
         if (error) throw error;
-        await login(data.session);
         toast('Account created successfully!', 'success');
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-        if (error) throw error;
-        await login(data.session);
+        if (error) {
+          console.error('Sign in error:', error);
+          throw error;
+        }
+        console.log('Sign in successful, auth state change will handle login...');
         toast('Welcome back!', 'success');
       }
     } catch (error: any) {
+      console.error('Auth error:', error);
       toast(error.message || 'Authentication failed', 'error');
     } finally {
       setIsLoading(false);

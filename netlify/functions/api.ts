@@ -5,10 +5,27 @@ import { GoogleGenAI } from "@google/genai";
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 
-// Initialize client only if URL is provided to avoid crash at startup
-const supabase = supabaseUrl ? createClient(supabaseUrl, supabaseServiceKey) : null;
+// Initialize admin client
+const supabaseAdmin = supabaseUrl ? createClient(supabaseUrl, supabaseServiceKey) : null;
+
+// Helper to get a Supabase client for a specific request
+const getSupabaseClient = (event: any) => {
+  const authHeader = event.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    return createClient(supabaseUrl, supabaseServiceKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    });
+  }
+  return supabaseAdmin;
+};
 
 export const handler: Handler = async (event, context) => {
+  const supabase = getSupabaseClient(event);
   if (!supabase) {
     return {
       statusCode: 500,

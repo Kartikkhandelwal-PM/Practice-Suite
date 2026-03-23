@@ -544,7 +544,7 @@ export function TasksPage() {
                       <td className="px-3.5 py-2.5">
                         <div className="flex items-center gap-2">
                           <div className="font-medium text-blue-600 hover:underline cursor-pointer" onClick={() => openEditTask(t)}>{t.title}</div>
-                          {t.subtasks && t.subtasks.length > 0 && (
+                          {Array.isArray(t.subtasks) && t.subtasks.length > 0 && (
                             <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded" title={`${t.subtasks.filter(s => s.done).length}/${t.subtasks.length} checklist items done`}>
                               <CheckCircle2 size={10} />
                               <span>{t.subtasks.filter(s => s.done).length}/{t.subtasks.length}</span>

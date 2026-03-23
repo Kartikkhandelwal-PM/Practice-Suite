@@ -45,7 +45,7 @@ export function Sidebar() {
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings', permission: 'manage_settings' },
   ];
 
-  const filteredNavItems = navItems.filter(item => !item.permission || hasPermission(item.permission));
+  const filteredNavItems = navItems;
 
   return (
     <>

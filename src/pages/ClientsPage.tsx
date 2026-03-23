@@ -244,7 +244,7 @@ export function ClientsPage() {
                           <span className="text-[10px] font-mono text-gray-400">#{t.id}</span>
                           <span className="font-medium text-blue-600 hover:underline">{t.title}</span>
                           {!relevant && <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">Future/Past</span>}
-                          {t.subtasks && t.subtasks.length > 0 && (
+                          {Array.isArray(t.subtasks) && t.subtasks.length > 0 && (
                             <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded shrink-0" title={`${t.subtasks.filter(s => s.done).length}/${t.subtasks.length} subtasks done`}>
                               <GitMerge size={10} />
                               <span>{t.subtasks.filter(s => s.done).length}/{t.subtasks.length}</span>
