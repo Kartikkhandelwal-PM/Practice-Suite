@@ -10,7 +10,7 @@ const DashboardPreview = () => {
   if (!imageError) {
     return (
       <img 
-        src="/assets/dashboard.png" 
+        src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=2070" 
         alt="Dashboard Preview" 
         className="w-full h-full object-cover"
         onError={() => setImageError(true)}
