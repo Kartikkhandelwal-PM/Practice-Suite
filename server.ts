@@ -1483,7 +1483,8 @@ app.use(cookieParser());
     async function startDevServer() {
       // Vite middleware for development
       if (process.env.NODE_ENV !== 'production') {
-        const { createServer: createViteServer } = await import('vite');
+        const viteModule = 'vite';
+        const { createServer: createViteServer } = await import(viteModule);
         const vite = await createViteServer({
           server: { middlewareMode: true },
           appType: 'spa',
