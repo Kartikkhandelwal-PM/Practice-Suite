@@ -45,7 +45,7 @@ export function Sidebar() {
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings', permission: 'manage_settings' },
   ];
 
-  const filteredNavItems = navItems;
+  const filteredNavItems = navItems.filter(item => !item.permission || hasPermission(item.permission));
 
   return (
     <>
@@ -58,7 +58,7 @@ export function Sidebar() {
       )}
       <div className={`
         ${sidebarCollapsed ? 'w-[72px]' : 'w-[248px]'} 
-        shrink-0 bg-[#0d1117] flex flex-col h-screen transition-all duration-300 z-[100] overflow-hidden
+        shrink-0 bg-[#0d1117] flex flex-col h-screen transition-all duration-300 z-50 md:z-30 overflow-hidden
         fixed md:relative top-0 left-0 bottom-0
         ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>

@@ -99,7 +99,7 @@ export function Topbar() {
   };
 
   return (
-    <div className="h-[64px] bg-white border-b border-gray-200 flex items-center px-4 md:px-6 shrink-0 z-50 relative">
+    <div className="h-[64px] bg-white border-b border-gray-200 flex items-center px-4 md:px-6 shrink-0 z-40 relative">
       <div className="flex items-center gap-3 md:w-[240px] flex-1 md:flex-none min-w-0">
         <button 
           className="md:hidden w-9 h-9 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-lg shrink-0"

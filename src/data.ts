@@ -10,21 +10,34 @@ const subDays = (d: Date, n: number) => addDays(d, -n);
 
 export const INIT_PERMISSIONS: Permission[] = [
   { id: 'view_dashboard', name: 'View Dashboard', description: 'Access to main dashboard and stats', module: 'Dashboard' },
-  { id: 'view_tasks', name: 'Manage Tasks', description: 'Create, edit and delete tasks', module: 'Tasks' },
+  { id: 'view_tasks', name: 'View Tasks', description: 'View task list and details', module: 'Tasks' },
+  { id: 'manage_tasks', name: 'Manage Tasks', description: 'Create, edit and delete tasks', module: 'Tasks' },
   { id: 'view_clients', name: 'View Clients', description: 'View client list and details', module: 'Clients' },
   { id: 'manage_clients', name: 'Manage Clients', description: 'Add, edit and delete clients', module: 'Clients' },
+  { id: 'view_compliance', name: 'View Compliance', description: 'Access to compliance master', module: 'Compliance' },
+  { id: 'manage_compliance', name: 'Manage Compliance', description: 'Update compliance deadlines', module: 'Compliance' },
+  { id: 'view_documents', name: 'View Documents', description: 'Access to document manager', module: 'Documents' },
+  { id: 'manage_documents', name: 'Manage Documents', description: 'Upload and delete documents', module: 'Documents' },
+  { id: 'view_emails', name: 'View Emails', description: 'Access to email inbox', module: 'Emails' },
+  { id: 'manage_emails', name: 'Manage Emails', description: 'Send and sync emails', module: 'Emails' },
   { id: 'manage_team', name: 'Manage Team', description: 'Add and manage team members', module: 'Settings' },
   { id: 'manage_roles', name: 'Manage Roles', description: 'Create and manage custom roles', module: 'Settings' },
-  { id: 'view_compliance', name: 'View Compliance', description: 'Access to compliance master', module: 'Compliance' },
   { id: 'manage_settings', name: 'Manage Settings', description: 'Access to workspace configurations', module: 'Settings' },
 ];
 
 export const INIT_ROLES: Role[] = [
-  { id: '00000000-0000-0000-0000-000000000001', name: 'Admin', description: 'Full access to all modules', permissions: ['view_dashboard', 'view_tasks', 'view_clients', 'manage_clients', 'manage_team', 'manage_roles', 'view_compliance', 'manage_settings'], isSystem: true },
-  { id: '00000000-0000-0000-0000-000000000002', name: 'Manager', description: 'Manage tasks and clients', permissions: ['view_dashboard', 'view_tasks', 'view_clients', 'manage_clients', 'view_compliance'], isSystem: true },
-  { id: '00000000-0000-0000-0000-000000000003', name: 'Staff', description: 'Execute assigned tasks', permissions: ['view_dashboard', 'view_tasks', 'view_clients', 'view_compliance'], isSystem: true },
-  { id: '00000000-0000-0000-0000-000000000004', name: 'Article Clerk', description: 'Limited access for articles', permissions: ['view_dashboard', 'view_tasks', 'view_compliance'], isSystem: true },
+  { id: '00000000-0000-0000-0000-000000000001', name: 'Admin', description: 'Full access to all modules', permissions: ['view_dashboard', 'view_tasks', 'manage_tasks', 'view_clients', 'manage_clients', 'view_compliance', 'manage_compliance', 'view_documents', 'manage_documents', 'view_emails', 'manage_emails', 'manage_team', 'manage_roles', 'manage_settings'], isSystem: true, color: '#ef4444' },
+  { id: '00000000-0000-0000-0000-000000000002', name: 'Manager', description: 'Manage tasks and clients', permissions: ['view_dashboard', 'view_tasks', 'manage_tasks', 'view_clients', 'manage_clients', 'view_compliance', 'view_documents', 'manage_documents', 'view_emails'], isSystem: true, color: '#f59e0b' },
+  { id: '00000000-0000-0000-0000-000000000003', name: 'Staff', description: 'Execute assigned tasks', permissions: ['view_dashboard', 'view_tasks', 'view_clients', 'view_compliance', 'view_documents', 'view_emails'], isSystem: true, color: '#3b82f6' },
+  { id: '00000000-0000-0000-0000-000000000004', name: 'Article Clerk', description: 'Limited access for articles', permissions: ['view_dashboard', 'view_tasks', 'view_compliance', 'view_documents'], isSystem: true, color: '#10b981' },
 ];
+
+export const ROLE_COLORS: Record<string, string> = {
+  'Admin': '#ef4444',
+  'Manager': '#f59e0b',
+  'Staff': '#3b82f6',
+  'Article Clerk': '#10b981'
+};
 
 export const INIT_TASK_TYPES: TaskTypeConfig[] = [
   { id: 'tt1', name: 'Task', icon: 'check-square', color: '#3b82f6', workflowId: 'wf1' },
@@ -133,14 +146,14 @@ export const INIT_PASSWORDS: Password[] = [
 ];
 
 export const INIT_DOCS: Document[] = [
-  { id: 'd1', folderId: 'f2', name: 'GSTR-3B_Oct2024_AgarwalExports.pdf', type: 'pdf', size: '1.2 MB', clientId: 'c1', tags: ['GST', 'GSTR-3B', 'October', '2024'], uploadedBy: 'u2', uploadedAt: fmt(subDays(today, 5)), description: 'Filed GSTR-3B for October 2024' },
-  { id: 'd2', folderId: 'f2', name: 'GSTR-1_Oct2024_AgarwalExports.pdf', type: 'pdf', size: '890 KB', clientId: 'c1', tags: ['GST', 'GSTR-1', 'October', '2024'], uploadedBy: 'u2', uploadedAt: fmt(subDays(today, 6)), description: 'Filed GSTR-1 for October 2024' },
-  { id: 'd3', folderId: 'f3', name: 'BalanceSheet_FY2324_Sharma.xlsx', type: 'xlsx', size: '340 KB', clientId: 'c3', tags: ['Audit', 'Balance Sheet', 'FY2324'], uploadedBy: 'u4', uploadedAt: fmt(subDays(today, 3)), description: 'Balance sheet prepared for audit' },
-  { id: 'd4', folderId: 'f4', name: 'Form26Q_Q2_Mehta.pdf', type: 'pdf', size: '210 KB', clientId: 'c2', tags: ['TDS', '26Q', 'Q2', '2024'], uploadedBy: 'u3', uploadedAt: fmt(subDays(today, 10)), description: 'TDS return Q2 filed copy' },
-  { id: 'd5', folderId: 'f5', name: 'MGT7_Patel_Constructions.pdf', type: 'pdf', size: '520 KB', clientId: 'c4', tags: ['ROC', 'MGT-7', 'Annual'], uploadedBy: 'u2', uploadedAt: fmt(subDays(today, 7)), description: 'MGT-7 filed copy with SRN' },
-  { id: 'd6', folderId: 'f1', name: 'Engagement_Letter_Template.docx', type: 'docx', size: '85 KB', clientId: null, tags: ['Template', 'Engagement', 'Standard'], uploadedBy: 'u1', uploadedAt: fmt(subDays(today, 60)), description: 'Standard engagement letter template' },
-  { id: 'd7', folderId: 'f1', name: 'Client_KYC_Form.pdf', type: 'pdf', size: '120 KB', clientId: null, tags: ['Template', 'KYC'], uploadedBy: 'u1', uploadedAt: fmt(subDays(today, 90)), description: 'Standard KYC form for new clients' },
-  { id: 'd8', folderId: 'f6', name: 'GSTR-3B_Nov2024.pdf', type: 'pdf', size: '1.1 MB', clientId: 'c1', tags: ['GST', 'GSTR-3B'], uploadedBy: 'u2', uploadedAt: fmt(subDays(today, 1)), description: 'Draft GSTR-3B for November' },
+  { id: 'd1', folderId: 'f2', name: 'GSTR-3B_Oct2024_AgarwalExports.pdf', type: 'pdf', size: '1.2 MB', clientId: 'c1', tags: ['GST', 'GSTR-3B', 'October', '2024'], uploadedBy: 'u2', uploadedAt: fmt(subDays(today, 5)), description: 'Filed GSTR-3B for October 2024', storageType: 'local' },
+  { id: 'd2', folderId: 'f2', name: 'GSTR-1_Oct2024_AgarwalExports.pdf', type: 'pdf', size: '890 KB', clientId: 'c1', tags: ['GST', 'GSTR-1', 'October', '2024'], uploadedBy: 'u2', uploadedAt: fmt(subDays(today, 6)), description: 'Filed GSTR-1 for October 2024', storageType: 'google_drive' },
+  { id: 'd3', folderId: 'f3', name: 'BalanceSheet_FY2324_Sharma.xlsx', type: 'xlsx', size: '340 KB', clientId: 'c3', tags: ['Audit', 'Balance Sheet', 'FY2324'], uploadedBy: 'u4', uploadedAt: fmt(subDays(today, 3)), description: 'Balance sheet prepared for audit', storageType: 'local' },
+  { id: 'd4', folderId: 'f4', name: 'Form26Q_Q2_Mehta.pdf', type: 'pdf', size: '210 KB', clientId: 'c2', tags: ['TDS', '26Q', 'Q2', '2024'], uploadedBy: 'u3', uploadedAt: fmt(subDays(today, 10)), description: 'TDS return Q2 filed copy', storageType: 'onedrive' },
+  { id: 'd5', folderId: 'f5', name: 'MGT7_Patel_Constructions.pdf', type: 'pdf', size: '520 KB', clientId: 'c4', tags: ['ROC', 'MGT-7', 'Annual'], uploadedBy: 'u2', uploadedAt: fmt(subDays(today, 7)), description: 'MGT-7 filed copy with SRN', storageType: 'google_drive' },
+  { id: 'd6', folderId: 'f1', name: 'Engagement_Letter_Template.docx', type: 'docx', size: '85 KB', clientId: null, tags: ['Template', 'Engagement', 'Standard'], uploadedBy: 'u1', uploadedAt: fmt(subDays(today, 60)), description: 'Standard engagement letter template', storageType: 'local' },
+  { id: 'd7', folderId: 'f1', name: 'Client_KYC_Form.pdf', type: 'pdf', size: '120 KB', clientId: null, tags: ['Template', 'KYC'], uploadedBy: 'u1', uploadedAt: fmt(subDays(today, 90)), description: 'Standard KYC form for new clients', storageType: 'local' },
+  { id: 'd8', folderId: 'f6', name: 'GSTR-3B_Nov2024.pdf', type: 'pdf', size: '1.1 MB', clientId: 'c1', tags: ['GST', 'GSTR-3B'], uploadedBy: 'u2', uploadedAt: fmt(subDays(today, 1)), description: 'Draft GSTR-3B for November', storageType: 'google_drive' },
 ];
 
 export const INIT_FOLDERS: Folder[] = [

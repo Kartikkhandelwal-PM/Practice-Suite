@@ -56,17 +56,17 @@ export function DashboardPage() {
   });
 
   const overdue = filteredTasks.filter(t => t.status !== 'Completed' && (daysLeft(t.dueDate) ?? 0) < 0);
-  const awaitingInfo = filteredTasks.filter(t => t.status === 'Awaiting Info');
+  const awaitingInfo = filteredTasks.filter(t => t.status === 'Awaiting Info' || t.status === 'Blocked' || t.status === 'Awaiting Client');
   const dueSoon = filteredTasks.filter(t => t.status !== 'Completed' && (daysLeft(t.dueDate) ?? -1) >= 0 && (daysLeft(t.dueDate) ?? 8) <= 7);
-  const underReview = filteredTasks.filter(t => t.status === 'Under Review');
+  const underReview = filteredTasks.filter(t => t.status === 'Under Review' || t.status === 'Review' || t.status === 'Partner Review');
   const urgent = deadlines.filter(d => (daysLeft(d.dueDate) ?? 8) <= 7 && (daysLeft(d.dueDate) ?? -1) >= 0);
   const upcomingMeetings = meetings.filter(m => m.attendees.includes(currentUser?.id || '') && (daysLeft(m.date) ?? -1) >= 0 && m.status !== 'completed').slice(0, 3);
 
   const stats = [
     { id: 'overdue', label: 'Overdue Tasks', num: overdue.length, sub: overdue.length > 0 ? `${Math.abs(Math.min(...overdue.map(t => daysLeft(t.dueDate) || 0)))} days max` : 'No overdue tasks', color: '#dc2626', icon: AlertCircle, filter: 'overdue' },
     { id: 'due-soon', label: 'Due This Week', num: dueSoon.length, sub: 'In the next 7 days', color: '#2563eb', icon: Clock, filter: 'due-soon' },
-    { id: 'awaiting-info', label: 'Awaiting Info', num: awaitingInfo.length, sub: 'Blocked by client', color: '#d97706', icon: ShieldAlert, filter: 'Awaiting Info' },
-    { id: 'under-review', label: 'Under Review', num: underReview.length, sub: 'Needs partner approval', color: '#8b5cf6', icon: CheckCircle2, filter: 'Under Review' },
+    { id: 'awaiting-info', label: 'Awaiting Info', num: awaitingInfo.length, sub: 'Blocked / Pending Info', color: '#d97706', icon: ShieldAlert, filter: 'Awaiting Info' },
+    { id: 'under-review', label: 'Under Review', num: underReview.length, sub: 'Pending Approval', color: '#8b5cf6', icon: CheckCircle2, filter: 'Under Review' },
   ];
 
   const handleStatClick = (s: typeof stats[0]) => {
@@ -470,7 +470,7 @@ export function DashboardPage() {
               const uTasks = tasks.filter(t => t.assigneeId === u.id && t.status !== 'Completed');
               const uOverdue = uTasks.filter(t => (daysLeft(t.dueDate) ?? 0) < 0);
               const uDueSoon = uTasks.filter(t => (daysLeft(t.dueDate) ?? -1) >= 0 && (daysLeft(t.dueDate) ?? 8) <= 7);
-              const uAwaiting = uTasks.filter(t => t.status === 'Awaiting Info');
+              const uAwaiting = uTasks.filter(t => t.status === 'Awaiting Info' || t.status === 'Blocked' || t.status === 'Awaiting Client');
               
               return (
                 <div key={u.id} className="border border-gray-100 rounded-xl p-3.5 hover:shadow-md transition-shadow bg-gray-50/30 flex flex-col">
@@ -497,7 +497,7 @@ export function DashboardPage() {
                     </div>
                     <div className="bg-amber-50 border border-amber-100 rounded-lg p-2 flex flex-col items-center justify-center">
                       <span className="text-[18px] font-bold text-amber-600">{uAwaiting.length}</span>
-                      <span className="text-[10px] text-amber-600/80 uppercase font-semibold">Blocked</span>
+                      <span className="text-[10px] text-amber-600/80 uppercase font-semibold">Awaiting Info</span>
                     </div>
                   </div>
                   

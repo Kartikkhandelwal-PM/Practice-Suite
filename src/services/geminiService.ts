@@ -1,3 +1,5 @@
+import { apiFetch } from '../lib/supabase';
+
 const API_BASE = '/api/ai';
 
 export interface EmailSummary {
@@ -9,7 +11,7 @@ export interface EmailSummary {
 
 export const checkAiStatus = async (): Promise<{ configured: boolean, model: string, key_source?: string }> => {
   try {
-    const res = await fetch(`${API_BASE}/status`);
+    const res = await apiFetch(`${API_BASE}/status`);
     return await res.json();
   } catch (error) {
     console.error("Error checking AI status:", error);
@@ -33,9 +35,8 @@ Return a JSON object with the following keys:
 
 Do not include any extra conversational text or markdown code blocks outside the JSON.`;
 
-    const res = await fetch(`${API_BASE}/generate`, {
+    const res = await apiFetch(`${API_BASE}/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         prompt,
         responseSchema: {
@@ -96,9 +97,8 @@ export const improveDraft = async (subject: string, body: string): Promise<{ sub
       ? `Please rephrase and improve the following email draft to be more professional and clear. Return a JSON object with two keys: "subject" (a concise, professional subject line) and "body" (the improved email body in HTML format, using <p>, <br>, <strong> etc. for formatting). Do not include any extra conversational text or markdown code blocks outside the JSON.\n\nOriginal Subject: ${subject}\nOriginal Body: ${body}`
       : `Please write a professional email draft based on the subject: "${subject}". Return a JSON object with two keys: "subject" (a concise, professional subject line) and "body" (the email body in HTML format, using <p>, <br>, <strong> etc. for formatting). Do not include any extra conversational text or markdown code blocks outside the JSON.`;
 
-    const res = await fetch(`${API_BASE}/generate`, {
+    const res = await apiFetch(`${API_BASE}/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         prompt,
         responseSchema: {

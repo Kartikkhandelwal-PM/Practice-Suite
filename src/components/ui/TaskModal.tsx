@@ -608,134 +608,164 @@ export function TaskModal({ task, templateId, onClose }: TaskModalProps) {
                     </button>
                   </div>
 
-                  <div className="border border-gray-200 rounded-xl bg-white shadow-sm">
-                    {(childTasks.length > 0 || pendingSubtasks.length > 0 || (Array.isArray(form.subtasks) && form.subtasks.length > 0)) ? (
-                      <div className="divide-y divide-gray-100">
-                        {form.subtasks?.map((st, idx) => (
-                          <div key={st.id} className="relative focus-within:z-10 flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors group">
-                            <input 
-                              type="checkbox" 
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" 
-                              checked={st.done} 
-                              onChange={e => {
-                                const newSubtasks = [...(form.subtasks || [])];
-                                newSubtasks[idx] = { ...st, done: e.target.checked };
-                                setForm({ ...form, subtasks: newSubtasks });
-                              }} 
-                            />
-                            <div className="flex-1 min-w-0 flex items-center gap-2">
-                              <span className="text-[10px] font-mono text-gray-400">CHK</span>
-                              <input 
-                                className={`w-full bg-transparent border-none p-0 text-[13px] outline-none focus:ring-0 font-medium ${st.done ? 'line-through text-gray-400' : 'text-gray-900'}`} 
-                                value={st.title} 
-                                onChange={e => {
-                                  const newSubtasks = [...(form.subtasks || [])];
-                                  newSubtasks[idx] = { ...st, title: e.target.value };
-                                  setForm({ ...form, subtasks: newSubtasks });
-                                }} 
-                              />
-                            </div>
-                            <button 
-                              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100" 
-                              onClick={() => {
-                                const newSubtasks = form.subtasks?.filter((_, i) => i !== idx);
-                                setForm({ ...form, subtasks: newSubtasks });
-                              }}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        ))}
-                        {pendingSubtasks.map((pst, idx) => (
-                          <div key={`pending-${idx}`} className="relative focus-within:z-10 flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors group">
-                            <input 
-                              type="checkbox" 
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" 
-                              checked={pst.status === 'Completed'} 
-                              onChange={e => setPendingSubtasks(prev => prev.map((p, i) => i === idx ? { ...p, status: e.target.checked ? 'Completed' : 'To Do' } : p))} 
-                            />
-                            <div className="flex-1 min-w-0 flex items-center gap-2">
-                              <span className="text-[10px] font-mono text-gray-400">#{pst.id || 'NEW'}</span>
-                              <input 
-                                className={`w-full bg-transparent border-none p-0 text-[13px] outline-none focus:ring-0 font-medium ${pst.status === 'Completed' ? 'line-through text-gray-400' : 'text-gray-900'}`} 
-                                value={pst.title} 
-                                onChange={e => setPendingSubtasks(prev => prev.map((p, i) => i === idx ? { ...p, title: e.target.value } : p))} 
-                              />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="w-[120px]">
-                                <SearchableSelect 
-                                  options={userOptions} 
-                                  value={pst.assigneeId || ''} 
-                                  onChange={v => setPendingSubtasks(prev => prev.map((p, i) => i === idx ? { ...p, assigneeId: v } : p))} 
-                                  placeholder="Assignee" 
+                  <div className="space-y-6">
+                    {/* Subtasks Section */}
+                    <div>
+                      <h4 className="text-[13px] font-bold text-gray-900 mb-3 flex items-center gap-2">
+                        <GitMerge size={14} className="text-blue-600" />
+                        Linked Subtasks
+                      </h4>
+                      <div className="border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden">
+                        {(childTasks.length > 0 || pendingSubtasks.length > 0) ? (
+                          <div className="divide-y divide-gray-100">
+                            {pendingSubtasks.map((pst, idx) => (
+                              <div key={`pending-${idx}`} className="relative focus-within:z-10 flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors group">
+                                <input 
+                                  type="checkbox" 
+                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" 
+                                  checked={pst.status === 'Completed'} 
+                                  onChange={e => setPendingSubtasks(prev => prev.map((p, i) => i === idx ? { ...p, status: e.target.checked ? 'Completed' : 'To Do' } : p))} 
                                 />
+                                <div className="flex-1 min-w-0 flex items-center gap-2">
+                                  <span className="text-[10px] font-mono text-gray-400">#{pst.id || 'NEW'}</span>
+                                  <input 
+                                    className={`w-full bg-transparent border-none p-0 text-[13px] outline-none focus:ring-0 font-medium ${pst.status === 'Completed' ? 'line-through text-gray-400' : 'text-gray-900'}`} 
+                                    value={pst.title} 
+                                    onChange={e => setPendingSubtasks(prev => prev.map((p, i) => i === idx ? { ...p, title: e.target.value } : p))} 
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-[120px]">
+                                    <SearchableSelect 
+                                      options={userOptions} 
+                                      value={pst.assigneeId || ''} 
+                                      onChange={v => setPendingSubtasks(prev => prev.map((p, i) => i === idx ? { ...p, assigneeId: v } : p))} 
+                                      placeholder="Assignee" 
+                                    />
+                                  </div>
+                                  <button className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100" onClick={() => setPendingSubtasks(prev => prev.filter((_, i) => i !== idx))}>
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
                               </div>
-                              <button className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100" onClick={() => setPendingSubtasks(prev => prev.filter((_, i) => i !== idx))}>
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                        {childTasks.map((s) => (
-                          <div key={s.id} className="relative focus-within:z-10 flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors group">
-                            <input 
-                              type="checkbox" 
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" 
-                              checked={s.status === 'Completed'} 
-                              onChange={async (e) => {
-                                try {
-                                  await updateTask(s.id, { status: e.target.checked ? 'Completed' : 'To Do' });
-                                } catch (err) {
-                                  console.error(err);
-                                }
-                              }} 
-                            />
-                            <div className="flex-1 min-w-0 flex items-center gap-2">
-                              <span className="text-[10px] font-mono text-gray-400">#{s.id}</span>
-                              <input 
-                                className={`w-full bg-transparent border-none p-0 text-[13px] outline-none focus:ring-0 ${s.status === 'Completed' ? 'line-through text-gray-400' : 'text-gray-900 font-medium'}`} 
-                                value={s.title} 
-                                onChange={async (e) => {
-                                  try {
-                                    await updateTask(s.id, { title: e.target.value });
-                                  } catch (err) {
-                                    console.error(err);
-                                  }
-                                }} 
-                                placeholder="Subtask title" 
-                              />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="w-[120px]">
-                                <SearchableSelect options={userOptions} value={s.assigneeId || ''} onChange={async (v) => {
-                                  try {
-                                    await updateTask(s.id, { assigneeId: v });
-                                  } catch (err) {
-                                    console.error(err);
-                                  }
-                                }} placeholder="Assignee" />
+                            ))}
+                            {childTasks.map((s) => (
+                              <div key={s.id} className="relative focus-within:z-10 flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors group">
+                                <input 
+                                  type="checkbox" 
+                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" 
+                                  checked={s.status === 'Completed'} 
+                                  onChange={async (e) => {
+                                    try {
+                                      await updateTask(s.id, { status: e.target.checked ? 'Completed' : 'To Do' });
+                                    } catch (err) {
+                                      console.error(err);
+                                    }
+                                  }} 
+                                />
+                                <div className="flex-1 min-w-0 flex items-center gap-2">
+                                  <span className="text-[10px] font-mono text-gray-400">#{s.id}</span>
+                                  <input 
+                                    className={`w-full bg-transparent border-none p-0 text-[13px] outline-none focus:ring-0 ${s.status === 'Completed' ? 'line-through text-gray-400' : 'text-gray-900 font-medium'}`} 
+                                    value={s.title} 
+                                    onChange={async (e) => {
+                                      try {
+                                        await updateTask(s.id, { title: e.target.value });
+                                      } catch (err) {
+                                        console.error(err);
+                                      }
+                                    }} 
+                                    placeholder="Subtask title" 
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-[120px]">
+                                    <SearchableSelect options={userOptions} value={s.assigneeId || ''} onChange={async (v) => {
+                                      try {
+                                        await updateTask(s.id, { assigneeId: v });
+                                      } catch (err) {
+                                        console.error(err);
+                                      }
+                                    }} placeholder="Assignee" />
+                                  </div>
+                                  <button className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100" onClick={async () => { 
+                                    try {
+                                      await updateTask(s.id, { parentId: null });
+                                    } catch (err) {
+                                      console.error(err);
+                                    }
+                                  }}>
+                                    <X size={14} />
+                                  </button>
+                                </div>
                               </div>
-                              <button className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100" onClick={async () => { 
-                                try {
-                                  await deleteTask(s.id);
-                                } catch (err) {
-                                  console.error(err);
-                                }
-                              }}>
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
+                            ))}
                           </div>
-                        ))}
+                        ) : (
+                          <div className="p-8 text-center flex flex-col items-center justify-center text-gray-500">
+                            <GitMerge size={24} className="text-gray-300 mb-2" />
+                            <p className="text-[13px] font-medium text-gray-900">No linked subtasks</p>
+                            <p className="text-[12px] mt-1">Add a new subtask or link an existing task above.</p>
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="p-12 text-center bg-gray-50/50">
-                        <GitMerge size={32} className="mx-auto text-gray-300 mb-3" />
-                        <h4 className="text-[14px] font-bold text-gray-700">No subtasks yet</h4>
-                        <p className="text-[12px] text-gray-500 mt-1">Break this task down into smaller, manageable steps.</p>
+                    </div>
+
+                    {/* Checklist Section */}
+                    <div>
+                      <h4 className="text-[13px] font-bold text-gray-900 mb-3 flex items-center gap-2">
+                        <CheckCircle2 size={14} className="text-green-600" />
+                        Checklist Items
+                      </h4>
+                      <div className="border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden">
+                        {Array.isArray(form.subtasks) && form.subtasks.length > 0 ? (
+                          <div className="divide-y divide-gray-100">
+                            {form.subtasks.map((st, idx) => (
+                              <div key={st.id} className="relative focus-within:z-10 flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors group">
+                                <input 
+                                  type="checkbox" 
+                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" 
+                                  checked={st.done} 
+                                  onChange={e => {
+                                    const newSubtasks = [...(form.subtasks || [])];
+                                    newSubtasks[idx] = { ...st, done: e.target.checked };
+                                    setForm({ ...form, subtasks: newSubtasks });
+                                  }} 
+                                />
+                                <div className="flex-1 min-w-0 flex items-center gap-2">
+                                  <span className="text-[10px] font-mono text-gray-400">CHK</span>
+                                  <input 
+                                    className={`w-full bg-transparent border-none p-0 text-[13px] outline-none focus:ring-0 font-medium ${st.done ? 'line-through text-gray-400' : 'text-gray-900'}`} 
+                                    value={st.title} 
+                                    onChange={e => {
+                                      const newSubtasks = [...(form.subtasks || [])];
+                                      newSubtasks[idx] = { ...st, title: e.target.value };
+                                      setForm({ ...form, subtasks: newSubtasks });
+                                    }} 
+                                    placeholder="Checklist item description..."
+                                  />
+                                </div>
+                                <button 
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100" 
+                                  onClick={() => {
+                                    const newSubtasks = form.subtasks?.filter((_, i) => i !== idx);
+                                    setForm({ ...form, subtasks: newSubtasks });
+                                  }}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="p-8 text-center flex flex-col items-center justify-center text-gray-500">
+                            <CheckCircle2 size={24} className="text-gray-300 mb-2" />
+                            <p className="text-[13px] font-medium text-gray-900">No checklist items</p>
+                            <p className="text-[12px] mt-1">Add items to track simple steps.</p>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>

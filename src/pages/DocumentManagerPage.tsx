@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { Plus, Search, Folder, FolderOpen, FileText, Upload, Trash2, Download, Copy, X, Building2, Clock, Zap, CheckCircle2, ExternalLink, FileImage, FileSpreadsheet, FileVideo, FileAudio, FileArchive, FileCode, File } from 'lucide-react';
+import { Plus, Search, Folder, FolderOpen, FileText, Upload, Trash2, Download, Copy, X, Building2, Clock, Zap, CheckCircle2, ExternalLink, FileImage, FileSpreadsheet, FileVideo, FileAudio, FileArchive, FileCode, File, Cloud } from 'lucide-react';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Modal } from '../components/ui/Modal';
 import { TagInput } from '../components/ui/TagInput';
@@ -343,10 +343,21 @@ export function DocumentManagerPage() {
                 className="border-none bg-transparent outline-none text-[13px] w-full text-gray-900"
               />
             </div>
-            <select className="w-full sm:w-auto px-2.5 py-1.5 border border-gray-200 rounded-lg text-[12.5px] bg-white outline-none cursor-pointer hover:border-gray-400 focus:border-blue-600" value={filterTag} onChange={e => setFilterTag(e.target.value)}>
-              <option value="">All Tags</option>
-              {allTags.map(t => <option key={t}>{t}</option>)}
-            </select>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <select className="flex-1 sm:w-auto px-2.5 py-1.5 border border-gray-200 rounded-lg text-[12.5px] bg-white outline-none cursor-pointer hover:border-gray-400 focus:border-blue-600" value={filterTag} onChange={e => setFilterTag(e.target.value)}>
+                <option value="">All Tags</option>
+                {allTags.map(t => <option key={t}>{t}</option>)}
+              </select>
+              {filterTag && (
+                <button 
+                  onClick={() => setFilterTag('')}
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Clear tag filter"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
@@ -363,6 +374,7 @@ export function DocumentManagerPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filteredDocs.map(d => {
                 const uploader = users.find(u => u.id === d.uploadedBy);
+                const client = clients.find(c => c.id === d.clientId);
                 const fc = getFileColor(d.type);
                 return (
                   <div key={d.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-blue-300 transition-all group bg-white">
@@ -371,7 +383,17 @@ export function DocumentManagerPage() {
                         {getFileIcon(d.type)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-[13px] text-gray-900 truncate" title={d.name}>{d.name}</div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="font-semibold text-[13px] text-gray-900 truncate" title={d.name}>{d.name}</div>
+                          {d.storageType && d.storageType !== 'local' && (
+                            <div className={`px-1.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 ${
+                              d.storageType === 'google_drive' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-blue-100 text-blue-700 border border-blue-200'
+                            }`}>
+                              <Cloud size={8} />
+                              {d.storageType.replace('_', ' ')}
+                            </div>
+                          )}
+                        </div>
                         <div className="text-[11px] text-gray-500 mt-0.5 uppercase tracking-wider font-bold" style={{ color: fc }}>{d.type} <span className="text-gray-400 font-medium ml-1">• {d.size}</span></div>
                       </div>
                       <button className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={() => delDoc(d.id)}>
@@ -379,19 +401,52 @@ export function DocumentManagerPage() {
                       </button>
                     </div>
                     
+                    <div className="space-y-1.5 mb-3">
+                      {client && (
+                        <div className="flex items-center gap-2 text-[10.5px] text-gray-600 bg-blue-50/50 px-2 py-1 rounded-lg border border-blue-100/50">
+                          <Building2 size={12} className="text-blue-500 shrink-0" />
+                          <span className="font-bold uppercase tracking-tighter opacity-70">Client:</span>
+                          <span className="truncate font-semibold">{client.name}</span>
+                        </div>
+                      )}
+                      {uploader && (
+                        <div className="flex items-center gap-2 text-[10.5px] text-gray-600 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100">
+                          <Zap size={12} className="text-amber-500 shrink-0" />
+                          <span className="font-bold uppercase tracking-tighter opacity-70">Uploader:</span>
+                          <span className="truncate font-semibold">{uploader.name}</span>
+                        </div>
+                      )}
+                    </div>
+
                     {d.description && <p className="text-[11.5px] text-gray-600 mb-3 line-clamp-2 leading-relaxed">{d.description}</p>}
                     
                     {d.tags && d.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-3">
                         {d.tags.map(t => (
-                          <span key={t} className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[10px] font-semibold">{t}</span>
+                          <button 
+                            key={t} 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFilterTag(t);
+                            }}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                              filterTag === t 
+                                ? 'bg-blue-600 text-white' 
+                                : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                            }`}
+                          >
+                            #{t}
+                          </button>
                         ))}
                       </div>
                     )}
                     
                     <div className="flex justify-between items-center text-[10.5px] text-gray-400 font-medium mb-3">
-                      <span>{uploader?.name?.split(' ')[0] || '—'}</span>
-                      <span>{d.uploadedAt}</span>
+                      <div className="flex items-center gap-1">
+                        <Clock size={10} />
+                        <span>{d.uploadedAt}</span>
+                      </div>
+                      <span>{d.size}</span>
                     </div>
                     
                     <div className="flex gap-2 pt-3 border-t border-gray-100">

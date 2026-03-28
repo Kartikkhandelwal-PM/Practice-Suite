@@ -9,7 +9,16 @@ export interface User {
   color: string;
   active: boolean;
   avatarUrl?: string;
-  dashboardImageUrl?: string;
+  allowedSyncEmails?: string[];
+  cloudStorageSettings?: CloudStorageSettings;
+  lastEmailSyncAt?: string;
+  projectPrefix?: string;
+}
+
+export interface CloudStorageSettings {
+  autoSync: boolean;
+  clientSpecificFolders: boolean;
+  defaultProvider?: 'google_drive' | 'onedrive';
 }
 
 export interface Client {
@@ -152,6 +161,7 @@ export interface Email {
   taskLinked: string | null;
   attachments: string[];
   folder?: 'inbox' | 'sent' | 'drafts' | 'trash';
+  provider?: 'google' | 'microsoft';
 }
 
 export interface Note {
@@ -177,6 +187,8 @@ export interface Password {
   category: string;
   strength: number;
   lastUpdated: string;
+  isDsc?: boolean;
+  expiryDate?: string;
 }
 
 export interface Document {
@@ -191,6 +203,7 @@ export interface Document {
   uploadedAt: string;
   description: string;
   data?: string;
+  storageType?: 'local' | 'google_drive' | 'onedrive';
 }
 
 export interface Folder {
@@ -240,4 +253,5 @@ export interface Role {
   description: string;
   permissions: string[]; // Array of permission IDs
   isSystem?: boolean;
+  color?: string;
 }

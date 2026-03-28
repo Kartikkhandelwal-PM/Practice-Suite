@@ -26,7 +26,7 @@ export function PasswordManagerPage() {
 
   const [showSidebar, setShowSidebar] = useState(false);
 
-  const CATS = ['GST', 'Income Tax', 'TDS', 'MCA', 'TRACES', 'Other'];
+  const CATS = ['GST', 'Income Tax', 'TDS', 'MCA', 'TRACES', 'DSC', 'Other'];
 
   const filtered = passwords.filter(p =>
     (!search || p.portal.toLowerCase().includes(search.toLowerCase()) || p.username.toLowerCase().includes(search.toLowerCase())) &&
@@ -62,7 +62,7 @@ export function PasswordManagerPage() {
   };
 
   const openNew = () => {
-    setForm({ id: genUUID(), clientId: activeSelection.type === 'client' ? activeSelection.id || '' : '', portal: '', url: '', username: '', password: '', notes: '', category: 'GST', strength: 0, lastUpdated: fmt(today) });
+    setForm({ id: genUUID(), clientId: activeSelection.type === 'client' ? activeSelection.id || '' : '', portal: '', url: '', username: '', password: '', notes: '', category: 'GST', strength: 0, lastUpdated: fmt(today), isDsc: false, expiryDate: '' });
     setModal(true);
   };
   
@@ -170,16 +170,20 @@ export function PasswordManagerPage() {
               
               {expandedClients && (
                 <div className="space-y-0.5 mt-1">
-                  {clients.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase())).map(client => (
-                    <div 
-                      key={client.id}
-                      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-colors ml-2 ${activeSelection.type === 'client' && activeSelection.id === client.id ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'}`}
-                      onClick={() => selectClient('client', client.id)}
-                    >
-                      <Building2 size={14} className={activeSelection.type === 'client' && activeSelection.id === client.id ? 'text-blue-600' : 'text-gray-400'} />
-                      <span className="text-[12.5px] font-medium truncate">{client.name}</span>
-                    </div>
-                  ))}
+                  {clients.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase())).map(client => {
+                    const clientPwCount = passwords.filter(p => p.clientId === client.id).length;
+                    return (
+                      <div 
+                        key={client.id}
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-colors ml-2 ${activeSelection.type === 'client' && activeSelection.id === client.id ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'}`}
+                        onClick={() => selectClient('client', client.id)}
+                      >
+                        <Building2 size={14} className={activeSelection.type === 'client' && activeSelection.id === client.id ? 'text-blue-600' : 'text-gray-400'} />
+                        <span className="text-[12.5px] font-medium truncate flex-1">{client.name}</span>
+                        <span className="text-[10px] text-gray-400 font-medium">{clientPwCount}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -232,12 +236,19 @@ export function PasswordManagerPage() {
                     </div>
 
                     <div className="flex items-start gap-3 mb-4 pr-16">
-                      <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0 border border-blue-100">
-                        <Lock size={18} />
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 border ${p.isDsc ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
+                        {p.isDsc ? <ShieldCheck size={18} /> : <Lock size={18} />}
                       </div>
                       <div className="min-w-0">
-                        <h3 className="text-[14px] font-bold text-gray-900 truncate">{p.portal}</h3>
-                        <div className="text-[12px] text-gray-500 truncate">{client?.name || 'Unknown Client'}</div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-[14px] font-bold text-gray-900 truncate">{p.portal}</h3>
+                          {p.isDsc && <span className="bg-purple-100 text-purple-700 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">DSC</span>}
+                          {p.category && <span className="bg-gray-100 text-gray-600 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">{p.category}</span>}
+                        </div>
+                        <div className="text-[12px] text-gray-500 truncate mt-0.5 flex items-center gap-1.5">
+                          <Building2 size={12} className="text-gray-400" />
+                          {client?.name || 'Unknown Client'}
+                        </div>
                       </div>
                     </div>
 
@@ -279,11 +290,18 @@ export function PasswordManagerPage() {
                         </div>
                         <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: sColor }}>{sLabel}</span>
                       </div>
-                      {p.url && (
-                        <a href={p.url} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-blue-600 hover:underline flex items-center gap-1">
-                          Open <ExternalLink size={10} />
-                        </a>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {p.isDsc && p.expiryDate && (
+                          <div className="flex items-center gap-1 text-[11px] font-semibold text-amber-600">
+                            <Clock size={12} /> Exp: {p.expiryDate}
+                          </div>
+                        )}
+                        {p.url && (
+                          <a href={p.url} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-blue-600 hover:underline flex items-center gap-1">
+                            Open <ExternalLink size={10} />
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -344,6 +362,30 @@ export function PasswordManagerPage() {
                 </div>
               </div>
             </div>
+
+            <div className="flex items-center gap-2 mt-2">
+              <input 
+                type="checkbox" 
+                id="isDsc" 
+                checked={form.isDsc || false} 
+                onChange={e => setForm({ ...form, isDsc: e.target.checked })}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <label htmlFor="isDsc" className="text-[13px] font-medium text-gray-700">This is a Digital Signature Certificate (DSC)</label>
+            </div>
+
+            {form.isDsc && (
+              <div>
+                <label className="block text-[11.5px] font-semibold text-gray-500 mb-1.5">Expiry Date</label>
+                <input 
+                  type="date" 
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13.5px] outline-none focus:border-blue-600" 
+                  value={form.expiryDate || ''} 
+                  onChange={e => setForm({ ...form, expiryDate: e.target.value })} 
+                />
+              </div>
+            )}
+
             <div>
               <label className="block text-[11.5px] font-semibold text-gray-500 mb-1.5">Notes / Security Q&A</label>
               <textarea className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13.5px] outline-none focus:border-blue-600 resize-none h-[80px]" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />

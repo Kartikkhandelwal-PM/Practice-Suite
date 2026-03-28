@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
-import { Search, Filter, Plus, Calendar, Reply, Forward, Paperclip, Link as LinkIcon, Settings, Bot, CheckCircle2, Mail, X, Send, Inbox, Send as SendIcon, FileText, Trash2, AlertCircle, Sparkles } from 'lucide-react';
+import { supabase, apiFetch } from '../lib/supabase';
+import { Search, Filter, Plus, Calendar, Reply, Forward, Paperclip, Link as LinkIcon, Settings, Bot, CheckCircle2, Mail, X, Send, Inbox, Send as SendIcon, FileText, Trash2, AlertCircle, Sparkles, RefreshCw } from 'lucide-react';
 import { Email } from '../types';
 import { TaskModal } from '../components/ui/TaskModal';
 import { genUUID, fmt, today } from '../utils';
@@ -63,7 +64,7 @@ function EmailAutocompleteInput({ value = '', onChange, placeholder, users, clie
 }
 
 export function InboxPage() {
-  const { emails, clients, users, currentUser, addEmail, updateEmail, deleteEmail, addTask } = useApp();
+  const { emails, clients, users, currentUser, addEmail, updateEmail, deleteEmail, addTask, syncEmails, connectedAccounts } = useApp();
   const toast = useToast();
 
   const [search, setSearch] = useState('');
@@ -79,28 +80,43 @@ export function InboxPage() {
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
   const [emailSummary, setEmailSummary] = useState<EmailSummary | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [selectiveSync, setSelectiveSync] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [aiError, setAiError] = useState<string | null>(null);
+
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      await syncEmails(selectiveSync);
+      toast(selectiveSync ? 'Selective sync completed' : 'Emails synced successfully', 'success');
+    } catch (error: any) {
+      console.error('Sync error:', error);
+      toast(error.message || 'Failed to sync emails', 'error');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const fetchSummary = async () => {
     if (!selectedEmail || currentFolder !== 'inbox') return;
     setIsSummarizing(true);
     setAiError(null);
     try {
-      const summary = await summarizeEmail(
-        selectedEmail.subject,
-        selectedEmail.body,
-        selectedEmail.from,
-        currentUser?.name || 'User'
-      );
+      const res = await apiFetch('/api/emails/process', {
+        method: 'POST',
+        body: JSON.stringify({
+          subject: selectedEmail.subject,
+          body: selectedEmail.body,
+          senderName: selectedEmail.from,
+          userName: currentUser?.name || 'User'
+        })
+      });
       
-      // Check if the summary returned is actually an error fallback
-      if (summary.overview.includes('Quota Exceeded') || summary.overview.includes('limit has been reached')) {
-        setAiError(summary.overview);
-        setEmailSummary(null);
-      } else {
-        setEmailSummary(summary);
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to process email');
+      
+      setEmailSummary(data);
     } catch (err: any) {
       console.error(err);
       setAiError(err.message || "Failed to generate AI insights.");
@@ -180,6 +196,24 @@ export function InboxPage() {
     };
     
     try {
+      // Actually send the email via API
+      const sendRes = await apiFetch('/api/emails/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          to: composeData.to,
+          subject: composeData.subject,
+          body: composeData.body,
+          cc: composeData.cc,
+          bcc: composeData.bcc,
+          provider: composeModal.email?.provider // Use same provider if replying
+        })
+      });
+
+      if (!sendRes.ok) {
+        const errorData = await sendRes.json();
+        throw new Error(errorData.error || 'Failed to send email via provider');
+      }
+
       if (composeModal.email?.folder === 'drafts') {
         await deleteEmail(composeModal.email!.id);
       }
@@ -189,9 +223,9 @@ export function InboxPage() {
       if (currentFolder === 'sent') {
         setSelectedEmail(newEmail);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending email:', error);
-      toast('Failed to send message', 'error');
+      toast(error.message || 'Failed to send message', 'error');
     }
   };
 
@@ -244,11 +278,36 @@ export function InboxPage() {
 
   const filteredEmails = emails.filter(e => {
     const folder = e.folder || 'inbox';
-    if (folder !== currentFolder) return false;
-    if (search && !e.subject.toLowerCase().includes(search.toLowerCase()) && !e.from.toLowerCase().includes(search.toLowerCase())) return false;
-    if (clientFilter && e.clientId !== clientFilter) return false;
-    return true;
+    const folderMatch = folder === currentFolder;
+    const subject = (e.subject || '').toLowerCase();
+    const from = (e.from || '').toLowerCase();
+    const searchLower = search.toLowerCase();
+    const searchMatch = !search || subject.includes(searchLower) || from.includes(searchLower);
+    const clientMatch = !clientFilter || e.clientId === clientFilter;
+    
+    return folderMatch && searchMatch && clientMatch;
   });
+
+  React.useEffect(() => {
+    console.log('[InboxPage] Emails state count:', emails.length);
+    console.log('[InboxPage] Filtered emails count:', filteredEmails.length, 'for folder:', currentFolder);
+    if (emails.length > 0 && filteredEmails.length === 0) {
+      console.log('[InboxPage] Emails exist but none match filters. Sample email:', JSON.stringify(emails[0], null, 2));
+    }
+  }, [emails.length, filteredEmails.length, currentFolder]);
+
+  React.useEffect(() => {
+    if (!selectedEmail && filteredEmails.length > 0) {
+      setSelectedEmail(filteredEmails[0]);
+    }
+  }, [filteredEmails, selectedEmail]);
+
+  React.useEffect(() => {
+    // Initial sync on mount if connected
+    if (connectedAccounts.length > 0 && emails.length === 0) {
+      handleSync();
+    }
+  }, [connectedAccounts.length]);
 
   const handleEmailClick = async (email: Email) => {
     if (email.folder === 'drafts') {
@@ -288,18 +347,54 @@ export function InboxPage() {
           <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus-within:border-blue-600 transition-colors w-full sm:w-[250px]">
             <Search size={14} className="text-gray-400 shrink-0" />
             <input 
-              placeholder="Search tasks, clients..." 
+              placeholder="Search emails..." 
               className="border-none bg-transparent outline-none text-[13px] w-full text-gray-900"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
             />
           </div>
           <button className="flex-1 sm:flex-none bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-[13px] font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors">
             <Filter size={14} /> Filter
           </button>
+          <button 
+            onClick={handleSync} 
+            disabled={isSyncing}
+            className="flex-1 sm:flex-none bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-[13px] font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} /> {isSyncing ? 'Syncing...' : 'Sync Emails'}
+          </button>
+          <label className="flex items-center gap-2 cursor-pointer bg-white border border-gray-200 px-3 py-1.5 rounded-lg">
+            <input 
+              type="checkbox" 
+              checked={selectiveSync}
+              onChange={(e) => setSelectiveSync(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-[12px] text-gray-700 font-medium whitespace-nowrap">Selective Sync</span>
+          </label>
           <button onClick={() => openCompose('compose')} className="flex-1 sm:flex-none bg-[#d9534f] hover:bg-[#c9302c] text-white px-4 py-1.5 rounded-lg text-[13px] font-medium flex items-center justify-center gap-2 transition-colors">
             <Plus size={14} /> Compose
           </button>
         </div>
       </div>
+
+      {connectedAccounts.length === 0 && emails.length === 0 && (
+        <div className="mb-6 bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start gap-3">
+          <AlertCircle className="text-orange-600 shrink-0 mt-0.5" size={18} />
+          <div className="flex-1">
+            <h3 className="text-[14px] font-bold text-orange-900">No Email Accounts Connected</h3>
+            <p className="text-[12px] text-orange-800 mt-1">
+              Connect your Gmail or Outlook account in Settings to sync and view your real emails here.
+            </p>
+            <button 
+              onClick={() => window.location.href = '/settings'}
+              className="mt-2 text-[12px] font-bold text-orange-900 underline hover:no-underline"
+            >
+              Go to Settings
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Email Integration Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -410,7 +505,7 @@ export function InboxPage() {
         <div className={`flex-1 flex flex-col bg-white min-w-0 ${mobileView === 'list' ? 'hidden lg:flex' : 'flex'}`}>
           {selectedEmail ? (
             <>
-              <div className="p-4 lg:p-6 border-b border-gray-100 shrink-0">
+              <div className="p-4 lg:p-6 border-b border-gray-100 shrink-0 min-h-fit">
                 <div className="flex items-center gap-2 mb-4 lg:hidden">
                   <button 
                     onClick={() => setMobileView('list')}
@@ -468,10 +563,19 @@ export function InboxPage() {
               
               <div className="flex-1 overflow-y-auto p-4 lg:p-8 bg-gray-50/30 custom-scrollbar flex flex-col items-center">
                 <div className="w-full max-w-4xl bg-white p-6 lg:p-10 rounded-xl shadow-sm border border-gray-100 min-h-full flex flex-col">
-                  <div 
-                    className="text-[14px] lg:text-[15px] text-gray-800 leading-relaxed flex-1 prose prose-sm lg:prose-base max-w-none"
-                    dangerouslySetInnerHTML={{ __html: selectedEmail.body.includes('<') ? selectedEmail.body : selectedEmail.body.replace(/\n/g, '<br>') }}
-                  />
+                  {selectedEmail.body.includes('<') && selectedEmail.body.includes('>') ? (
+                    <iframe 
+                      srcDoc={selectedEmail.body} 
+                      className="w-full h-full flex-1 border-none min-h-[500px]" 
+                      title="Email Body"
+                      sandbox="allow-same-origin allow-popups"
+                    />
+                  ) : (
+                    <div 
+                      className="text-[14px] lg:text-[15px] text-gray-800 leading-relaxed flex-1 prose prose-sm lg:prose-base max-w-none"
+                      dangerouslySetInnerHTML={{ __html: selectedEmail.body.replace(/\n/g, '<br>') }}
+                    />
+                  )}
                   
                   {/* AI Suggestion Box at the bottom of the email body */}
                   {currentFolder === 'inbox' && (
