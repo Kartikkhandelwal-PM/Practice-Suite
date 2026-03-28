@@ -2,8 +2,6 @@ import { GoogleGenAI } from "@google/genai";
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
-import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { google } from 'googleapis';
@@ -11,9 +9,6 @@ import axios from 'axios';
 import cookieParser from 'cookie-parser';
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Initialize Supabase Admin client
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
@@ -196,13 +191,20 @@ const verifyAuth = async (req: any, res: any, next: any) => {
   next();
 };
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+export const app = express();
+const PORT = 3000;
 
-  app.use(cors());
-  app.use(express.json({ limit: '50mb' }));
-  app.use(cookieParser());
+// Rewrite Netlify function paths so Express routes match correctly
+app.use((req, res, next) => {
+  if (req.url.startsWith('/.netlify/functions/api')) {
+    req.url = req.url.replace('/.netlify/functions/api', '') || '/';
+  }
+  next();
+});
+
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(cookieParser());
 
   // Helper to safely log errors without causing EPIPE or other issues
   const logError = (message: string, error: any) => {
@@ -1476,24 +1478,28 @@ async function startServer() {
     res.status(500).json({ error: 'Internal server error', details: err.message });
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+  // Only start the server if we are not running in a Netlify serverless environment
+  if (process.env.NETLIFY !== 'true' && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    async function startDevServer() {
+      // Vite middleware for development
+      if (process.env.NODE_ENV !== 'production') {
+        const { createServer: createViteServer } = await import('vite');
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: 'spa',
+        });
+        app.use(vite.middlewares);
+      } else {
+        const distPath = path.join(process.cwd(), 'dist');
+        app.use(express.static(distPath));
+        app.get('*', (req, res) => {
+          res.sendFile(path.join(distPath, 'index.html'));
+        });
+      }
+
+      app.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+      });
+    }
+    startDevServer();
   }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-}
-
-startServer();
